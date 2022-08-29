@@ -1,0 +1,976 @@
+//CÓDIGO PARA CONTROLE DE VELOCIDADE DE UM MOTOR DE INDUÇÃO TRIFÁSICO DE 0.25CV.
+//TRABALHO DE CONCLUSÃO DE CURSO
+//ALUNO: LEONARDO DUARTE MILFONT MATRÍCULA: 378771
+//PROFESSORES ORIENTADORES : WILKLEY BEZERRA E DALTON HONÓRIO
+
+// INCLUDE FILES.
+#include <math.h>
+#include <stdio.h>
+#include "F28x_Project.h"
+#include "params.h"
+
+#define DPI 6.28318530717958647692
+
+//VARIÁVEIS GLOBAIS.
+
+float t = 0;//Variável para medição de tempo.
+int saida = 0; //Variável para controle do loop principal.
+float b,c,d = 0; // Valores de moduladora para PWM em malha aberta.
+float theta_atual_ma = 0; //Ângulo para aplicação das transformadas de eixo em malha aberta.
+float theta_ant_ma = 0; // Armazena valor anterior do ângulo para aplicação das transformadsa de eixo em malha aberta.
+float theta_ant = 0; // Armazena valor anterior do ângulo para aplicação das transformadsa de eixo em malha fechada.
+float theta_atual = 0; // Armazena valor anterior do ângulo para aplicação das transformadsa de eixo em malha feechada.
+
+//Variáveis de auxílio para aplicação das transformadas de eixo.
+unsigned int pin12 = 0,cont_zero = 0; //Variáveis de controle gerias.
+int Ia_med, Ib_med, Ic_med, Ia_med0, Ib_med0, Ic_med0, I_d_AD, I_q_AD; //Tratamento das variáveis medidas mo conversor AD.
+float  ia, ib, ic;
+float va, vb, vc;
+
+//Correntes de referência nos eixos d/q.
+float I_d =0;
+float I_q =0;
+float erro_cd =0; //Erro para o controlador (eixo d).
+float erro_cq =0; //Erro para o controlador (eixo q).
+float erro_cd_ant1 =0; //Erro para o controlador uma amostra anterior (eixo d).
+float erro_cq_ant1 =0; //Erro para o controladoruyma amostra anterior (eixo q).
+float v_atual_d =0; //Saída de tensão atual do controlador (eixo d).
+float v_atual_q =0; //Saída de tensão atual do controlador (eixo q).
+float v_d_ant =0; //Saída de tensão  do controlador uma amostra anteriorr (eixo d).
+float v_q_ant =0; //Saída de tensão  do controlador uma amostra anterior (eixo q).
+float I_atual_d=0; //Saída de corrente da planta controlada (eixo d).
+float I_atual_q=0; //Saída de corrente da planta controlada (eixo q).
+float I_d_ant =0; //Saída de corrente  do controlador uma amostra anteriorr (eixo d).
+float I_q_ant =0; //Saída de corrente  do controlador uma amostra anterior (eixo q).
+
+
+int Va_med = 0, Vb_med = 0, Vc_med = 0;
+
+float Va =0; //tensões de saída do modulador.
+float Vb =0;
+float Vc =0;
+float theta_rad; // Ângulo calculado no integrador.
+float ref_kd =0.4; //Valores de referência para os eixos d e q.
+float ref_kq =0;
+unsigned int ref_kd_AD =0; //Valores de referência para os eixos d e q em valores digitais.
+unsigned int ref_kq_AD =0;
+float ref_kq_ant =0;//Valores passados para a referência de corrente no eixo q.
+
+//Variáveis gerais.
+float T = 0; //Constante de tempo do rotor.
+float w=0;   //Velocidade mecânica do rotor em rad/s.
+float w_eletrica=0;  // Velocidade angular elétrica medida em rad/s.
+unsigned int Posicao_ADC = 0; //Leitura da velocidade no módulo eqep.
+float Rotor_Posicao = 0; //Posição angular do rotor.
+float Rotor_Posicao_Ant = 0; //Memória da posição angular do rotor.
+float delta_posicao =0; //Variação da posição angular do rotor.
+float delta_posicao_1 =0; //Variação da posição angular do rotor (variável auxiliar).
+float Velo = 0; //Medida de velocidade mecânica do rotor em RPM.
+float Velo_avg =0; //Leitura filtrada de velocidade.
+unsigned long Velo_ADC =0 ; //Medida digital da velocidade.
+float Velo_aux = 0; //Variável auxiliar para controle de velocidade.
+float wsl=0;  //Velocidade de escorregamento do rotor.
+float w_tot =0; //Velocidade elétrica do rotor em rad/s.
+float w_avg =0; //Velocidade angular depois do filtro.
+float ref_Velo = 1000; //Referência de velocidade para o controle do motor.
+unsigned int ref_Velo_AD =0; //Referência digital de velocidade.
+unsigned int ref = 1;   //Escolha da referência de velocidade.
+float ref_Velo1 =0; //Referência de velocidade para o controle do motor.
+float cont_velo =0; //Contador para a malha de velocidade.
+float cont_velo_aux =0; //Contador para a referência de velocidade.
+float erro_Velo =0; // Erro para a amlha de velocidade.
+float erro_Velo_ant1 =0; //Valores passados para o erro da malha de velocidade.
+float Velo_ant1 =0;//Valores passados para a velociddae do motor.
+
+// Variáveis do controle de fluxo
+// variaveis Andresa
+float auxta, auxtb;
+
+// Transformadas
+float raiz32 = 0.866025403784439;
+
+// Referência de tensão no eixo alpha-beta
+float Valp = 0, Vbet = 0;
+// Correntes medidas no eixo alpha-beta
+float Ialp, Ibet;
+
+
+float V_a = 0, V_b=0, V_c = 0;
+
+// Variáveis para estimação de fluxo de rotor
+float  U_alp_int = 0, U_alp_int_k1 =0;
+float U_bet_int = 0, U_bet_int_k1 =0;
+float  i_alp_int=0, i_alp_int_k1=0;
+float  i_bet_int=0, i_bet_int_k1=0;
+float delta_V_a = 0;
+float flux_a = 0;
+float ref_a = 0;
+float delta_V_b = 0;
+float flux_b = 0;
+float ref_b= 0;
+
+float flux_a_cf = 0,  flux_b_cf = 0;
+float flux_a_k1 = 0, flux_b_k1 = 0;
+float flux_a_k2=0, flux_b_k2=0, flux_a_cf_k1 = 0,  flux_a_cf_k2 = 0,  flux_b_cf_k1 = 0,  flux_b_cf_k2 = 0;
+float y_a = 0, y_b = 0;
+float e_a = 0, e_b = 0;
+float e_a_k1 = 0, e_b_k1 = 0;
+float e_a_int = 0, e_a_int_k1 = 0;
+float e_b_int = 0, e_b_int_k1 = 0;
+float u_a = 0, u_a_k1 = 0;
+float u_b = 0, u_b_k1 = 0;
+float theta_r= 0;
+float flux_r = 0;
+
+float ref_flux, e_flux = 0, e_flux_ant = 0;
+float ref_kd_ant = 0;
+
+float va_obs = 0, vb_obs = 0, vc_obs = 0, ia_obs = 0, ib_obs = 0, ic_obs = 0, refmras = 0;
+
+// FUNCTIONS
+void InitEPwmS(void);
+void LigaEPWMs(void);
+void SetupTimers(void);
+void ConfigureDAC(void);
+void SetupADC(void);
+void zero_sensores(void);
+void SetupEQEP1(void);
+__interrupt void adca1_isr(void);
+__interrupt void epwm1_isr(void);
+__interrupt void epwm2_isr(void);
+__interrupt void epwm3_isr(void);
+__interrupt void timer0_isr(void);
+float ref_MRAS(float, float, float, float, float, float);
+// MAIN
+void main(void){
+    //INICIALIZAÇÃO DO CONTROLE DO SISTEMA.
+     InitSysCtrl();
+    //1 ib
+    //2 ic
+    //0 ia
+    //CONFIGURAÇÃO DOS PINOS DE ENTRADA E SAÍDA.
+    EALLOW;
+
+    //CONFIGURAÇÃO DOS PINOS DO PWM E CONTROLE DAS 6 CHAVES DO INVERSOR.
+    GpioCtrlRegs.GPAMUX1.bit.GPIO0 = 0; //S1.
+    GpioCtrlRegs.GPADIR.bit.GPIO0 = 1;
+
+    GpioCtrlRegs.GPAMUX1.bit.GPIO1 = 0; //S2
+    GpioCtrlRegs.GPADIR.bit.GPIO1 = 1;
+
+    GpioCtrlRegs.GPAMUX1.bit.GPIO2 = 0; //S3
+    GpioCtrlRegs.GPADIR.bit.GPIO2 = 1;
+
+    GpioCtrlRegs.GPAMUX1.bit.GPIO3 = 0; //S4
+    GpioCtrlRegs.GPADIR.bit.GPIO3 = 1;
+
+    GpioCtrlRegs.GPAMUX1.bit.GPIO4 = 0; //S5
+    GpioCtrlRegs.GPADIR.bit.GPIO4 = 1;
+
+    GpioCtrlRegs.GPAMUX1.bit.GPIO5 = 0; //S6
+    GpioCtrlRegs.GPADIR.bit.GPIO5 = 1;
+
+    //CHAVE CONTROLADOR.
+    GpioCtrlRegs.GPAMUX1.bit.GPIO14 = 0;
+    GpioCtrlRegs.GPADIR.bit.GPIO14 = 0;
+
+    //MUDA_REFERÊNCIA.
+    GpioCtrlRegs.GPAMUX1.bit.GPIO15 = 0;
+    GpioCtrlRegs.GPADIR.bit.GPIO15 = 1;
+
+    //EQEP.
+    InitEQep1Gpio();
+
+    EDIS;
+
+    // HABILITANDO  PWM1, PWM2, PWM3
+    CpuSysRegs.PCLKCR2.bit.EPWM1=1;
+    CpuSysRegs.PCLKCR2.bit.EPWM2=1;
+    CpuSysRegs.PCLKCR2.bit.EPWM3=1;
+    CpuSysRegs.PCLKCR0.bit.CPUTIMER0 = 1;
+    CpuSysRegs.PCLKCR0.bit.CPUTIMER1 = 1;
+
+    // Step 3. Clear all interrupts and initialize PIE vector table:
+    // Disable CPU interrupts
+    DINT;
+    InitPieCtrl();
+    IER = 0x0000;
+    IFR = 0x0000;
+    InitPieVectTable();
+
+    DINT; //step1
+    PieCtrlRegs.PIECTRL.bit.ENPIE = 1;
+    PieCtrlRegs.PIEIER1.bit.INTx1 = 1;
+    EALLOW;
+
+    // AS INTERRUPÇÕES QUE SÃO USADAS SÃO REMAPEADAS.
+    EALLOW;
+    PieVectTable.ADCA1_INT = &adca1_isr;
+
+    PieVectTable.TIMER0_INT = &timer0_isr;
+
+    PieVectTable.EPWM1_INT = &epwm1_isr;
+    PieVectTable.EPWM2_INT = &epwm2_isr;
+    PieVectTable.EPWM3_INT = &epwm3_isr;
+    EDIS;
+
+    // Step 4. Initialize the Device Peripherals:
+    //
+    EALLOW;
+    CpuSysRegs.PCLKCR0.bit.TBCLKSYNC =0;
+    EDIS;
+    ConfigureDAC();
+    SetupEQEP1();
+    InitEPwmS();
+    SetupTimers();
+    SetupADC();
+    EALLOW;
+    CpuSysRegs.PCLKCR0.bit.TBCLKSYNC =1;
+    EDIS;
+
+    // Enable CPU INT3 which is connected to EPWM1-3 INT:
+    IER |= M_INT1 | M_INT3;
+    PieCtrlRegs.PIEIER3.bit.INTx1 = 1;
+    PieCtrlRegs.PIEIER3.bit.INTx2 = 1;
+    PieCtrlRegs.PIEIER3.bit.INTx3 = 1;
+    PieCtrlRegs.PIEIER1.bit.INTx7 = 1;
+    // Enable global Interrupts and higher priority real-time debug events:
+    EINT;  // Enable Global interrupt INTM
+    ERTM;  // Enable Global realtime interrupt DBGM
+
+    LigaEPWMs();
+
+    while(1){
+        //PINO DE CONTROLE PARA O CONTROLADOR.
+        pin12 = GpioDataRegs.GPADAT.bit.GPIO14;
+
+        //MODULADORA SENOIDAL PARA PWM EM MALHA ABERTA.
+        b=4000 + 3200*__sin(theta_atual_ma);
+        c=4000 + 3200*__sin(theta_atual_ma  -  ((DPI)/3));
+        d=4000 + 3200*__sin(theta_atual_ma  -  ((2*DPI)/3));
+
+        //LOOP.
+        for(;;){
+            // va -> ic
+            // vb -> vb
+            // vc -> ia
+            DacaRegs.DACVALS.all = flux_a_k1 * 2048.0 + 1024;
+            DacbRegs.DACVALS.all = flux_b_k1 * 2048.0 + 1024;
+            if(saida==1){
+                break;
+            }
+        }
+        saida = 0;
+    }
+}
+
+// INICIALIZAÇÃO DOS PWMS.
+void InitEPwmS(){
+    //ePWM 1
+    EPwm1Regs.TBPRD = 8000;                       // Set timer period 6kHz
+    EPwm1Regs.TBPHS.bit.TBPHS = 0;                // Phase is 0
+    EPwm1Regs.TBCTR = 0x0000;                     // Clear counter
+
+    // Setup TBCLK
+    EPwm1Regs.TBCTL.bit.CTRMODE   = TB_COUNT_UPDOWN; // Count up/down
+    EPwm1Regs.TBCTL.bit.PHSEN     = TB_DISABLE; // Disable phase loading
+    EPwm1Regs.TBCTL.bit.PHSDIR    = 1; // Direção Phase 1 Positivo - 0 Negativo
+    EPwm1Regs.TBCTL.bit.SYNCOSEL  = TB_CTR_ZERO; // EPWMxSYNCI / SWFSYNC
+    EPwm1Regs.TBCTL.bit.HSPCLKDIV = TB_DIV1; // Clock ratio to SYSCLKOUT: dividido por 1
+    EPwm1Regs.TBCTL.bit.CLKDIV    = TB_DIV1; // Clock ratio to SYSCLKOUT: dividido por 1
+
+    EPwm1Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW;   // Load registers every ZERO
+    EPwm1Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW;
+    EPwm1Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO;
+    EPwm1Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO;
+
+    // Set actions
+    EPwm1Regs.AQCTLA.bit.CAU = AQ_CLEAR;
+    EPwm1Regs.AQCTLA.bit.CAD = AQ_SET;
+    EPwm1Regs.AQCTLB.bit.CAU = AQ_SET;
+    EPwm1Regs.AQCTLB.bit.CAD = AQ_CLEAR;
+
+    // Active Low PWMs - Setup Deadband
+    EPwm1Regs.DBCTL.bit.OUT_MODE = DB_FULL_ENABLE;
+    EPwm1Regs.DBCTL.bit.POLSEL   = DB_ACTV_HIC;
+    EPwm1Regs.DBCTL.bit.IN_MODE  = DBA_ALL;
+    EPwm1Regs.DBCTL.bit.OUTSWAP  = 0x3;
+    EPwm1Regs.DBRED.bit.DBRED    = 20;
+    EPwm1Regs.DBFED.bit.DBFED    = 20;
+
+    //ePWM 2
+    EPwm2Regs.TBPRD = 8000;                       // Set timer period 6kHz
+    EPwm2Regs.TBPHS.bit.TBPHS = 0;                // Phase is 0
+    EPwm2Regs.TBCTR = 0x0000;                     // Clear counter
+
+    //Setup TBCLK
+    EPwm2Regs.TBCTL.bit.CTRMODE   = TB_COUNT_UPDOWN; // Count up/down
+    EPwm2Regs.TBCTL.bit.PHSEN     = TB_DISABLE; // Disable phase loading
+    EPwm2Regs.TBCTL.bit.PHSDIR    = 1; // Direção Phase 1 Positivo - 0 Negativo
+    EPwm2Regs.TBCTL.bit.SYNCOSEL  = TB_CTR_ZERO; // EPWMxSYNCI / SWFSYNC
+    EPwm2Regs.TBCTL.bit.HSPCLKDIV = TB_DIV1; // Clock ratio to SYSCLKOUT: dividido por 1
+    EPwm2Regs.TBCTL.bit.CLKDIV    = TB_DIV1; // Clock ratio to SYSCLKOUT: dividido por 1
+
+    EPwm2Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW;   // Load registers every ZERO
+    EPwm2Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW;
+    EPwm2Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO;
+    EPwm2Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO;
+
+    //Set actions
+    EPwm2Regs.AQCTLA.bit.CAU = AQ_CLEAR;
+    EPwm2Regs.AQCTLA.bit.CAD = AQ_SET;
+    EPwm2Regs.AQCTLB.bit.CAU = AQ_SET;
+    EPwm2Regs.AQCTLB.bit.CAD = AQ_CLEAR;
+
+    //Active Low PWMs - Setup Deadband
+    EPwm2Regs.DBCTL.bit.OUT_MODE = DB_FULL_ENABLE;
+    EPwm2Regs.DBCTL.bit.POLSEL = DB_ACTV_HIC;
+    EPwm2Regs.DBCTL.bit.IN_MODE = DBA_ALL;
+    EPwm2Regs.DBCTL.bit.OUTSWAP  = 0x3;
+    EPwm2Regs.DBRED.bit.DBRED = 20;
+    EPwm2Regs.DBFED.bit.DBFED = 20;
+
+    //ePWM 3
+    EPwm3Regs.TBPRD = 8000;                       // Set timer period 6kHz
+    EPwm3Regs.TBPHS.bit.TBPHS = 0;                // Phase is 0
+    EPwm3Regs.TBCTR = 0x0000;                     // Clear counter
+
+    //Setup TBCLK
+    EPwm3Regs.TBCTL.bit.CTRMODE   = TB_COUNT_UPDOWN; // Count up/down
+    EPwm3Regs.TBCTL.bit.PHSEN     = TB_DISABLE; // Disable phase loading
+    EPwm3Regs.TBCTL.bit.PHSDIR    = 1; // Direção Phase 1 Positivo - 0 Negativo
+    EPwm3Regs.TBCTL.bit.SYNCOSEL  = TB_CTR_ZERO; // EPWMxSYNCI / SWFSYNC
+    EPwm3Regs.TBCTL.bit.HSPCLKDIV = TB_DIV1; // Clock ratio to SYSCLKOUT: dividido por 1
+    EPwm3Regs.TBCTL.bit.CLKDIV    = TB_DIV1; // Clock ratio to SYSCLKOUT: dividido por 1
+
+    EPwm3Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW;   // Load registers every ZERO
+    EPwm3Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW;
+    EPwm3Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO;
+    EPwm3Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO;
+
+    //Set actions
+    EPwm3Regs.AQCTLA.bit.CAU = AQ_CLEAR;
+    EPwm3Regs.AQCTLA.bit.CAD = AQ_SET;
+    EPwm3Regs.AQCTLB.bit.CAU = AQ_SET;
+    EPwm3Regs.AQCTLB.bit.CAD = AQ_CLEAR;
+
+    //Active Low PWMs - Setup Deadband
+    EPwm3Regs.DBCTL.bit.OUT_MODE = DB_FULL_ENABLE;
+    EPwm3Regs.DBCTL.bit.POLSEL = DB_ACTV_HIC;
+    EPwm3Regs.DBCTL.bit.IN_MODE = DBA_ALL;
+    EPwm3Regs.DBCTL.bit.OUTSWAP  = 0x3;
+    EPwm3Regs.DBRED.bit.DBRED = 20;
+    EPwm3Regs.DBFED.bit.DBFED = 20;
+
+    //Setup EPwm interrupts
+    EPwm1Regs.ETSEL.bit.INTSEL = 0b100;
+    EPwm1Regs.ETSEL.bit.INTSELCMP = 0;
+    EPwm1Regs.ETPS.bit.INTPSSEL = 0;
+    EPwm1Regs.ETPS.bit.INTPRD = 1;
+
+    EPwm2Regs.ETSEL.bit.INTSEL = 0b100;
+    EPwm2Regs.ETSEL.bit.INTSELCMP = 0;
+    EPwm2Regs.ETPS.bit.INTPSSEL = 0;
+    EPwm2Regs.ETPS.bit.INTPRD = 1;
+
+    EPwm3Regs.ETSEL.bit.INTSEL = 0b100;
+    EPwm3Regs.ETSEL.bit.INTSELCMP = 0;
+    EPwm3Regs.ETPS.bit.INTPSSEL = 0;
+    EPwm3Regs.ETPS.bit.INTPRD = 1;
+}
+
+const int vpeak = 250;
+
+int epwm1_high = 0;
+__interrupt void epwm1_isr(){
+    if(epwm1_high == 0){
+        vc_obs = vpeak;
+        epwm1_high = 1;
+        EPwm1Regs.ETSEL.bit.INTSEL = 0b101;
+    }else{
+        vc_obs = 0;
+        epwm1_high = 0;
+        EPwm1Regs.ETSEL.bit.INTSEL = 0b100;
+    }
+    EPwm1Regs.ETCLR.bit.INT = 1;
+    PieCtrlRegs.PIEACK.all |= PIEACK_GROUP3;
+}
+
+int epwm2_high = 0;
+__interrupt void epwm2_isr(){
+    if(epwm2_high == 0){
+        vb_obs = vpeak;
+        epwm2_high = 1;
+        EPwm2Regs.ETSEL.bit.INTSEL = 0b101;
+    }else{
+        vb_obs = 0;
+        epwm2_high = 0;
+        EPwm2Regs.ETSEL.bit.INTSEL = 0b100;
+    }
+    EPwm2Regs.ETCLR.bit.INT = 1;
+    PieCtrlRegs.PIEACK.all |= PIEACK_GROUP3;
+}
+
+int epwm3_high = 0;
+__interrupt void epwm3_isr(){
+    if(epwm3_high == 0){
+        va_obs = vpeak;
+        epwm3_high = 1;
+        EPwm3Regs.ETSEL.bit.INTSEL = 0b101;
+    }else{
+        va_obs = 0;
+        epwm3_high = 0;
+        EPwm3Regs.ETSEL.bit.INTSEL = 0b100;
+    }
+    EPwm3Regs.ETCLR.bit.INT = 1;
+    PieCtrlRegs.PIEACK.all |= PIEACK_GROUP3;
+}
+
+
+//  LIGA PWMS ------------------------------------------------------------------
+void LigaEPWMs(){
+    EALLOW;
+    GpioCtrlRegs.GPAPUD.bit.GPIO0     = 0;      // Enable Pullup    // PWM1A
+    GpioCtrlRegs.GPAMUX1.bit.GPIO0    = 1;      // GPIO0 = PWM
+    GpioCtrlRegs.GPADIR.bit.GPIO0     = 1;      // GPIO0 = output
+    GpioCtrlRegs.GPAPUD.bit.GPIO1     = 0;      // Enable Pullup    // PWM1B
+    GpioCtrlRegs.GPAMUX1.bit.GPIO1    = 1;      // GPIO1 = PWM
+    GpioCtrlRegs.GPADIR.bit.GPIO1     = 1;      // GPIO1 = output
+
+    GpioCtrlRegs.GPAPUD.bit.GPIO2     = 0;      // Enable Pullup    // PWM2A
+    GpioCtrlRegs.GPAMUX1.bit.GPIO2    = 1;      // GPIO2 = PWM
+    GpioCtrlRegs.GPADIR.bit.GPIO2     = 1;      // GPIO2 = output
+    GpioCtrlRegs.GPAPUD.bit.GPIO3     = 0;      // Enable Pullup    // PWM2B
+    GpioCtrlRegs.GPAMUX1.bit.GPIO3    = 1;      // GPIO3 = PWM
+    GpioCtrlRegs.GPADIR.bit.GPIO3     = 1;      // GPIO3 = output
+
+    GpioCtrlRegs.GPAPUD.bit.GPIO4     = 0;      // Enable Pullup    // PWM3A
+    GpioCtrlRegs.GPAMUX1.bit.GPIO4    = 1;      // GPIO4 = PWM
+    GpioCtrlRegs.GPADIR.bit.GPIO4     = 1;      // GPIO4 = output
+    GpioCtrlRegs.GPAPUD.bit.GPIO5     = 0;      // Enable Pullup    // PWM3B
+    GpioCtrlRegs.GPAMUX1.bit.GPIO5    = 1;      // GPIO5 = PWM
+    GpioCtrlRegs.GPADIR.bit.GPIO5     = 1;      // GPIO5 = output
+
+    EPwm1Regs.ETSEL.bit.INTEN = 1;
+    EPwm2Regs.ETSEL.bit.INTEN = 1;
+    EPwm3Regs.ETSEL.bit.INTEN = 1;
+    EDIS;
+}
+
+//CONFIGURAÇÃO DO TIMER 1.
+void SetupTimers(void){
+    InitCpuTimers();
+    ConfigCpuTimer(&CpuTimer1, 200, 3.2); //200MHz, 80us
+    CpuTimer1Regs.TCR.all = 0x4000;
+
+    ConfigCpuTimer(&CpuTimer0, 200, 160); //200MHz, 80us
+    CpuTimer0Regs.TCR.all = 0x4000;
+    CpuTimer0Regs.TCR.bit.TIE = 1;
+    CpuTimer0Regs.TCR.bit.TIF = 1;
+    PieCtrlRegs.PIEACK.all |= PIEACK_GROUP1;
+}
+
+//CONFIGURAÇÃO DO ADC.
+void SetupADC(void){
+    EALLOW;
+
+    //write configurations
+    AdcaRegs.ADCCTL2.bit.PRESCALE = 7; //set ADCCLK divider to /4.5
+    AdcbRegs.ADCCTL2.bit.PRESCALE = 7; //set ADCCLK divider to /4.5
+    AdccRegs.ADCCTL2.bit.PRESCALE = 7; //set ADCCLK divider to /4.5
+    AdcdRegs.ADCCTL2.bit.PRESCALE = 7; //set ADCCLK divider to /4.5
+
+    AdcSetMode(ADC_ADCA, ADC_RESOLUTION_12BIT, ADC_SIGNALMODE_SINGLE);
+    AdcSetMode(ADC_ADCB, ADC_RESOLUTION_12BIT, ADC_SIGNALMODE_SINGLE);
+    AdcSetMode(ADC_ADCC, ADC_RESOLUTION_12BIT, ADC_SIGNALMODE_SINGLE);
+    AdcSetMode(ADC_ADCD, ADC_RESOLUTION_12BIT, ADC_SIGNALMODE_SINGLE);
+
+    AdcaRegs.ADCCTL2.bit.RESOLUTION = 0;
+    AdcaRegs.ADCCTL2.bit.SIGNALMODE = 0;
+    AdcaRegs.ADCOFFTRIM.bit.OFFTRIM = 0;
+
+    AdcbRegs.ADCCTL2.bit.RESOLUTION = 0;
+    AdcbRegs.ADCCTL2.bit.SIGNALMODE = 0;
+    AdcbRegs.ADCOFFTRIM.bit.OFFTRIM = 0;
+
+    AdccRegs.ADCCTL2.bit.RESOLUTION = 0;
+    AdccRegs.ADCCTL2.bit.SIGNALMODE = 0;
+    AdccRegs.ADCOFFTRIM.bit.OFFTRIM = 0;
+
+    AdcdRegs.ADCCTL2.bit.RESOLUTION = 0;
+    AdcdRegs.ADCCTL2.bit.SIGNALMODE = 0;
+    AdcdRegs.ADCOFFTRIM.bit.OFFTRIM = 0;
+
+    //Set pulse positions to late
+    AdcaRegs.ADCCTL1.bit.INTPULSEPOS = 1;
+    AdcbRegs.ADCCTL1.bit.INTPULSEPOS = 1;
+    AdccRegs.ADCCTL1.bit.INTPULSEPOS = 1;
+    AdcdRegs.ADCCTL1.bit.INTPULSEPOS = 1;
+
+    //power up the ADCs
+    AdcaRegs.ADCCTL1.bit.ADCPWDNZ = 1;
+    AdcbRegs.ADCCTL1.bit.ADCPWDNZ = 1;
+    AdccRegs.ADCCTL1.bit.ADCPWDNZ = 1;
+    AdcdRegs.ADCCTL1.bit.ADCPWDNZ = 1;
+
+    EDIS;
+
+    DELAY_US(2000);
+
+    EALLOW;
+
+    //Configuração ADC-A
+    AdcaRegs.ADCSOC0CTL.bit.CHSEL = 3;      //SOC0 will convert pin A3
+    AdcaRegs.ADCSOC0CTL.bit.ACQPS = 28;
+    AdcaRegs.ADCSOC0CTL.bit.TRIGSEL = 2;    //trigger on Timer1 SOCA/C
+
+    AdcaRegs.ADCSOC1CTL.bit.CHSEL = 4;      //SOC1 will convert pin A4
+    AdcaRegs.ADCSOC1CTL.bit.ACQPS = 28;
+    AdcaRegs.ADCSOC1CTL.bit.TRIGSEL = 2;    //trigger on Timer1 SOCA/C
+
+    AdcaRegs.ADCINTSEL1N2.bit.INT1SEL = 0;  //end of SOC0 will set INT1 flag
+    AdcaRegs.ADCINTSEL1N2.bit.INT1E = 1;    //enable INT1 flag
+    AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1;  //make sure INT1 flag is cleared
+
+    //Configuração ADC-B
+    AdcbRegs.ADCSOC0CTL.bit.CHSEL = 3;      //SOC1 will convert pin B3
+    AdcbRegs.ADCSOC0CTL.bit.ACQPS = 28;
+    AdcbRegs.ADCSOC0CTL.bit.TRIGSEL = 2;    //trigger on TIMER1 SOCA/C
+
+    AdcbRegs.ADCSOC1CTL.bit.CHSEL = 5;      //SOC1 will convert pin 4
+    AdcbRegs.ADCSOC1CTL.bit.ACQPS = 28;
+    AdcbRegs.ADCSOC1CTL.bit.TRIGSEL = 2;    //trigger on Timer1 SOCA/C
+
+    //Configuração ADC-C
+    AdccRegs.ADCSOC0CTL.bit.CHSEL = 3;  //SOC2 will convert pin C3
+    AdccRegs.ADCSOC0CTL.bit.ACQPS = 28;
+    AdccRegs.ADCSOC0CTL.bit.TRIGSEL = 2;    //trigger on Timer1 SOCA
+
+    AdccRegs.ADCSOC1CTL.bit.CHSEL = 4;  //SOC2 will convert pin C3
+    AdccRegs.ADCSOC1CTL.bit.ACQPS = 28;
+    AdccRegs.ADCSOC1CTL.bit.TRIGSEL = 2;    //trigger on Timer1 SOCA
+
+    //Configuração ADC-D
+    AdcdRegs.ADCSOC0CTL.bit.CHSEL = 14;  //SOC3 will convert pin 14
+    AdcdRegs.ADCSOC0CTL.bit.ACQPS = 28;
+    AdcdRegs.ADCSOC0CTL.bit.TRIGSEL = 2;    //trigger on Timer1 SOCA
+//
+    AdcdRegs.ADCSOC1CTL.bit.CHSEL = 15;  //SOC3 will convert pin 14
+    AdcdRegs.ADCSOC1CTL.bit.ACQPS = 28;
+    AdcdRegs.ADCSOC1CTL.bit.TRIGSEL = 2;    //trigger on Timer1 SOCA
+
+    EDIS;
+}
+
+//CONFIGURAÇÃO DO DAC.
+
+void ConfigureDAC(){
+    EALLOW;
+
+    //DAC-B
+    DacbRegs.DACCTL.bit.DACREFSEL = 1;          // Use ADC references
+    DacbRegs.DACCTL.bit.LOADMODE = 0;           // Load on next SYSCLK
+    DacbRegs.DACVALS.all = 0x0800;              // Set mid-range
+    DacbRegs.DACOUTEN.bit.DACOUTEN = 1;         // Enable DAC
+
+    //DAC -A
+    DacaRegs.DACCTL.bit.DACREFSEL = 1;          // Use ADC references
+    DacaRegs.DACCTL.bit.LOADMODE = 0;           // Load on next SYSCLK
+    DacaRegs.DACVALS.all = 0x0800;              // Set mid-range
+    DacaRegs.DACOUTEN.bit.DACOUTEN = 1;         // Enable DAC
+
+    EDIS;
+}
+
+
+int cont_controle = 0;
+unsigned int tc = 0;
+__interrupt void timer0_isr(){
+    theta_atual_ma = ((0.000160)*DPI*20) + theta_ant_ma; // Integrador discreto.
+    theta_ant_ma = theta_atual_ma;
+
+    if(theta_atual_ma > DPI){
+        theta_atual_ma = theta_atual_ma -DPI;
+        theta_ant_ma = theta_atual_ma;// Controle para manter Theta
+    }
+    if(theta_atual_ma < 0){
+        theta_atual_ma = theta_atual_ma +DPI;
+        theta_ant_ma = theta_atual_ma;// Controle para manter Theta
+    }
+
+    //LEITURA EQEP -POSIÇÃO.
+    Posicao_ADC  = (int)(EQep1Regs.QPOSCNT);
+
+    //POSIÇAO ANGULAR.
+    Rotor_Posicao = (float)(Posicao_ADC*DPI)/(2048);
+    delta_posicao = Rotor_Posicao - Rotor_Posicao_Ant;
+
+    //ROTOR PARADO ??
+    if(delta_posicao ==0||Velo == 0){
+        Velo_aux = Velo;
+    }
+
+    //VELOCIDADE NEGATIVA??
+    if (delta_posicao <0 || Velo<0){
+        delta_posicao = delta_posicao_1;
+    }
+
+    //VELOCIDADE POSITIVA.
+    if (delta_posicao>0 || Velo>0){
+        //DERIVADA DISCRETA DA POSIÇÃO = VELOCIDADE.
+        w = (float)((delta_posicao)/(0.000160));
+        Velo = (float)(w*(60/(DPI)));
+
+        // Filtro passa baixa para f32f
+        Velo_avg = Velo_avg + 0.000160*(Velo - Velo_avg);
+        w_avg = (Velo_avg*DPI)/(60);
+
+        //Velocidade medida em valores digitais.
+        Velo_ADC = (int)(2.048*Velo_avg);
+    }
+    Rotor_Posicao_Ant = Rotor_Posicao;
+    Velo_ant1 = Velo_avg;
+
+    //refmras = ref_MRAS(va_obs, vb_obs, vc_obs, ia, ib, ic);
+    //INÍCIO DA MALHA DE CONTROLE.
+
+    if (pin12==1){
+        //CAMPO ORIENTADO INDIRETO.
+        T = ((Llr+Lm)/Rr);
+        wsl = (ref_kq)/(ref_kd*T);
+        w_tot = wsl + w_avg;
+
+        theta_atual = ((160E-006)*w_tot) + theta_ant; // Integrador discreto.
+        theta_ant = theta_atual;
+
+//        theta_atual = theta_r;
+//        theta_ant = theta_atual;
+
+        if(theta_atual > DPI){
+            theta_atual = theta_atual -DPI;
+            theta_ant = theta_atual;// Controle para manter Theta
+        }
+        if(theta_atual < 0){
+            theta_atual = theta_atual +DPI;
+            theta_ant = theta_atual;// Controle para manter Theta
+        }
+
+        // APLICAÇÃO DAS TRANSFORMADAS DE EIXO DE CLARKE E PARK.
+        // 2 - park.
+        theta_rad = theta_atual;
+
+        if(theta_rad > DPI){
+            theta_rad = theta_rad - DPI;
+        }
+        if(theta_rad < -DPI){
+            theta_rad = theta_rad + DPI;
+        }
+
+        I_d = 0.81649658092772603273242802490196*(ia*__cos(theta_rad) + ib*__cos(theta_rad - ((DPI)/3)) + ic*__cos(theta_rad -((2*DPI)/3)));
+        I_q = 0.81649658092772603273242802490196*(-ia*__sin(theta_rad) - ib*__sin(theta_rad - ((DPI)/3)) - ic*__sin(theta_rad -((2*DPI)/3)));
+
+        I_atual_d = I_d;
+        I_atual_q = I_q;
+
+        //Correntes d e q em valores digitais.
+
+        I_d_AD = (int)(1024*I_d) + 2048;
+        I_q_AD = (int)(1024*I_q) + 2048;
+
+
+        //MALHA DE VELOCIDADE.
+        cont_velo ++;
+        if(cont_velo==1225){
+            //Referência degrau
+            if(ref==1){
+                ref_Velo_AD = (int)(2.048*ref_Velo);
+            }
+
+            //Referência triangular
+            if (ref==2){
+                t = 0.096*cont_velo_aux;
+                if(t<2){
+                    ref_Velo = 100*(t) + 600 ;
+                    ref_Velo_AD = (int)(2.048*ref_Velo);
+                    cont_velo_aux ++;
+                }
+                if(t>=2){
+                    ref_Velo = -100*(t) + 1000 ;
+                    ref_Velo_AD = (int)(2.048*ref_Velo);
+                    cont_velo_aux ++;
+                }
+                if(t>=4){
+                    cont_velo_aux = 0;
+                }
+            }
+
+            //Referência trapezoidal
+            if (ref==3){
+                t = 0.096*cont_velo_aux;
+                if(t<2){
+                    ref_Velo = 100*(t) + 600 ;
+                    ref_Velo_AD = (int)(2.048*ref_Velo);
+                    cont_velo_aux ++;
+                }
+                if(t>=2 && t<3){
+                    ref_Velo = 800;
+                    ref_Velo_AD = (int)(2.048*ref_Velo);
+                    cont_velo_aux ++;
+                }
+                if(t>=3){
+                    ref_Velo = -100*(t) + 1100 ;
+                    ref_Velo_AD = (int)(2.048*ref_Velo);
+                    cont_velo_aux ++;
+                }
+                if(t>=5 && t<6){
+                    ref_Velo = 600;
+                    ref_Velo_AD = (int)(2.048*ref_Velo);
+                    cont_velo_aux ++;
+                }
+                if(t>=5 && t<6){
+                    cont_velo_aux = 0;
+                }
+            }
+
+            //Referência senoidal
+            if(ref==4){
+                t = 0.096*cont_velo_aux;
+                ref_Velo = 600 + 200*__sin(DPI*0.25*t);
+                cont_velo_aux++;
+                if(t==4){
+                    cont_velo_aux = 0;
+                }
+            }
+            cont_velo = 0;
+
+            //PI malha de velocidade
+            double ki = -0.0011;
+            double kp = 0.0011491;
+
+            //double ki = -0.001764;
+            //double kp = 0.00196;
+
+            //double ki = -0.001764;
+            //double kp = 0.00196;
+
+            erro_Velo = ref_Velo - Velo_avg;
+            ref_kq = ref_kq_ant + ki*erro_Velo_ant1 + kp*erro_Velo;
+            erro_Velo_ant1 = erro_Velo;
+            ref_kq_ant = ref_kq;
+
+            /*
+            * GPC malha de velocidade
+            //ref_Velo1 = ref_Velo*(9.317070813126087e-05);
+            ref_Velo1 = ref_Velo*(130.978479409080e-006);
+            //erro_Velo = ref_Velo1 - ((0.115347981981859*erro_Velo_ant1)  +  ((6.599753085671523e-04)*Velo_avg -(5.668046004358913e-04)*Velo_ant1));
+            erro_Velo = ref_Velo1 - (((152.705934971598e-003)*erro_Velo_ant1)  +  ((881.355078709949e-006)*Velo_avg -(750.376599300869e-006)*Velo_ant1));
+            ref_kq = erro_Velo + ref_kq_ant;
+            erro_Velo_ant1 = erro_Velo;
+            ref_kq_ant = ref_kq;
+            */
+        }
+
+
+        // ------------ TRANSFORMADA abc - alpha_beta -----------
+
+       Ialp = 0.666666666666667*(ia-0.5*ib-0.5*ic);
+       Ibet =0.666666666666667*raiz32*(ib-ic);
+
+       Valp = 0.666666666666667*(V_a-0.5*V_b-0.5*V_c);
+       Vbet = 0.666666666666667*raiz32*(V_b-V_c);
+
+       // ESTIMACAO DO FLUXO DO ROTOR
+
+       // modelo do estator
+       U_alp_int = (160e-6)*Valp + U_alp_int_k1;
+       i_alp_int = (160e-6)*Ialp*Rs + i_alp_int_k1;
+
+       U_bet_int = (160e-6)*Vbet + U_bet_int_k1;
+       i_bet_int = (160e-6)*Ibet*Rs + i_bet_int_k1;
+
+       delta_V_a = (1/Kr)*(U_alp_int - i_alp_int+u_a);
+       flux_a = delta_V_a - (sig*(Ls+Lm)/Kr)*Ialp;
+       ref_a = Lm*Ialp;
+
+       delta_V_b = (1/Kr)*(U_bet_int - i_bet_int+u_b);
+       flux_b = delta_V_b - (sig*(Ls+Lm)/Kr)*Ibet;
+       ref_b = Lm*Ibet;
+
+       // modelo do rotor
+       flux_a_cf = 149.7977312077128*flux_a+ 1.9940435300641*flux_a_k1 - 147.8036876776487*flux_a_k2 - 1.994039088505832*flux_a_cf_k1 - 0.994047971622293*flux_a_cf_k2;
+       flux_b_cf = 149.7977312077128*flux_b+ 1.9940435300641*flux_b_k1 - 147.8036876776487*flux_b_k2 - 1.994039088505832*flux_b_cf_k1 - 0.994047971622293*flux_b_cf_k2;
+
+       y_a = flux_a_cf + w*Tr*flux_b;
+       y_b = flux_b_cf - w*Tr*flux_a;
+
+       // controle
+       e_a = ref_a - y_a;
+       e_a_int = (80e-6)*(e_a + e_a_k1) + e_a_int_k1;
+       u_a = 37.094784000000004*(e_a_int +  e_a_int_k1) + u_a_k1;
+
+       e_b = ref_b - y_b;
+       e_b_int = (80e-6)*(e_b + e_b_k1) + e_b_int_k1;
+       u_b = 37.094784000000004*(e_b_int +  e_b_int_k1) + u_b_k1;
+
+       theta_r = atan2(flux_b,flux_a);
+       flux_r = sqrt((flux_a*flux_a)+(flux_b*flux_b));
+
+       // atualização de variáveis
+       U_alp_int_k1 = U_alp_int;
+       U_bet_int_k1 = U_bet_int;
+       i_alp_int_k1 = i_alp_int;
+       i_bet_int_k1 = i_bet_int;
+
+       flux_a_k2 = flux_a_k1;
+       flux_a_k1 = flux_a;
+       flux_b_k2 = flux_b_k1;
+       flux_b_k1 = flux_b;
+
+       flux_a_cf_k2 = flux_a_cf_k1;
+       flux_a_cf_k1 = flux_a_cf;
+       flux_b_cf_k2 = flux_b_cf_k1;
+       flux_b_cf_k1 = flux_b_cf;
+
+       e_a_int_k1 = e_a_int;
+       e_a_k1 = e_a;
+       e_b_int_k1 = e_b_int;
+       e_b_k1 = e_b;
+
+       u_a_k1 = u_a;
+       u_b_k1 = u_b;
+
+        // Malha de fluxo
+        float e_flux = 0.4  - flux_r;
+        ref_kd = 0.02166802248*0.07*e_flux - 0.01168997752*0.07*e_flux_ant + ref_kd_ant;
+        e_flux_ant = e_flux;
+        ref_kd_ant = ref_kd;
+        ref_kd = 0.4;
+        //REFERÊNCIAS EIXO D E Q:
+        ref_kd_AD = (int)(1024*ref_kd) + 2048;
+        ref_kq_AD = (int)(1024*ref_kq) + 2048;
+
+        //CÁLCULO DOS ERROS
+        erro_cd = ref_kd - I_d;
+        erro_cq =  ref_kq - I_q;
+
+        //LEI DE CONTROLE:
+        //Controladores eixo d e q.
+        v_atual_d =103*1.2* erro_cd -100.4 *1.2*  erro_cd_ant1  + v_d_ant ;
+        v_atual_q =103 *1.2*  erro_cq -100.4 *1.2*  erro_cq_ant1 + v_q_ant ;
+
+        //Atualização das variáveis.
+        erro_cd_ant1 = erro_cd;
+        erro_cq_ant1 = erro_cq;
+
+        I_q_ant = I_atual_q;
+        v_d_ant = v_atual_d;
+        v_q_ant = v_atual_q;
+
+        //APLICAÇÃO DAS TRANSFORMADAS INVERSAS DE CLARKE E PARK:
+        //A3 = v_atual_d*__cos(theta_rad);
+        //B3 = - v_atual_q*__sin(theta_rad);
+        //A4 = v_atual_d*__cos(theta_rad - ((DPI)/3.0));
+        //B4 =- v_atual_q*__sin(theta_rad - ((DPI)/3.0));
+        //A5 = v_atual_d*__cos(theta_rad - ((2*DPI)/3.0));
+        //B5 =- v_atual_q*__sin(theta_rad - ((2*DPI)/3.0));
+        Va =  0.81649658092772603273242802490196*(v_atual_d*__cos(theta_rad) - v_atual_q*__sin(theta_rad));
+        Vb =  0.81649658092772603273242802490196*(v_atual_d*__cos(theta_rad - ((DPI)/3.0)) - v_atual_q*__sin(theta_rad - ((DPI)/3.0)));
+        Vc =  0.81649658092772603273242802490196* (v_atual_d*__cos(theta_rad - ((2*DPI)/3.0)) - v_atual_q*__sin(theta_rad - ((2*DPI)/3.0)));
+
+        //GANHO DE MODULAÇÃO:
+        Va = Va*16;
+        Vb = Vb*16;
+        Vc = Vc*16;
+
+        //OFFSET:
+        Va = Va + 4000;
+        Vb = Vb + 4000;
+        Vc = Vc + 4000;
+
+        //SATURADOR:
+        if (Va >= 8000){
+            Va = 7950;
+        }
+        if (Va <= 0){
+            Va = 50;
+        }
+        if (Vb >= 8000){
+            Vb = 7950;
+        }
+        if (Vb <= 0 ){
+            Vb = 50;
+        }
+        if (Vc >= 8000){
+            Vc = 7950;
+        }
+        if (Vc <= 0){
+            Vc = 50;
+        }
+
+        V_a = (Va - 4000)/16.0;
+        V_b = (Vb - 4000)/16.0;
+        V_c = (Vc - 4000)/16.0;
+
+        //MODULAÇÃO:
+        EPwm1Regs.CMPA.bit.CMPA = Vc; // adjust duty for output EPWM1A
+        EPwm2Regs.CMPA.bit.CMPA = Vb; // adjust duty for output EPWM2A
+        EPwm3Regs.CMPA.bit.CMPA = Va; // adjust duty for output EPWM3A
+        //SEQUENCIA CORRETA DE CIMA PRA BAIXO C,B,A
+    }
+    if (pin12==0){
+        EPwm1Regs.CMPA.bit.CMPA = d; // adjust duty for output EPWM1A
+        EPwm2Regs.CMPA.bit.CMPA = c; // adjust duty for output EPWM2A
+        EPwm3Regs.CMPA.bit.CMPA = b; // adjust duty for output EPWM3A
+    }
+
+    saida = 1;
+
+    CpuTimer0Regs.TCR.bit.TIF = 1;
+    PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
+}
+
+__interrupt void adca1_isr(void){
+    Ia_med0 = 1792;
+    Ib_med0 = 1798;
+    Ic_med0 = 1718;
+    //LEITURA DO CONVERSOR AD.
+    Ic_med = AdcdResultRegs.ADCRESULT0;
+    Ib_med = AdcbResultRegs.ADCRESULT0;
+    Ia_med = AdccResultRegs.ADCRESULT0;
+
+    Vc_med = AdcaResultRegs.ADCRESULT1;
+    Vb_med = AdcbResultRegs.ADCRESULT1;
+    Va_med = AdcdResultRegs.ADCRESULT1;
+
+    va = Va_med * 540.0/4096.0;
+    vb = Vb_med * 540.0/4096.0;
+    vc = Vc_med * 540.0/4096.0;
+
+    // Ganho do ADC * Ganho do sensor;
+    ic = (Ic_med - Ic_med0)*0.0008056640625*1.33;
+    ib = (Ib_med - Ib_med0)*0.0008056640625*1.33;
+    ia = (Ia_med - Ia_med0)*0.0008056640625*1.33;
+
+    //refmras = ref_MRAS(va, vb, vc, ia, ib, ic);
+
+    AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //clear INT1 flag
+    PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
+}
+
+void SetupEQEP1 (){
+    EALLOW;
+    EQep1Regs.QUPRD = 500000;            // Unit Timer for 400Hz at 200 MHz
+                                              // SYSCLKOUT
+    EQep1Regs.QDECCTL.bit.QSRC = 00;      // QEP quadrature count mode
+    EQep1Regs.QEPCTL.bit.FREE_SOFT = 2;
+    EQep1Regs.QEPCTL.bit.PCRM = 01;         // PCRM=01 mode - QPOSCNT reset on maximum position
+    EQep1Regs.QEPCTL.bit.UTE = 1;         // Unit Timeout Enable
+    EQep1Regs.QEPCTL.bit.QCLM = 1;        // Latch on unit time out
+    EQep1Regs.QPOSMAX = 0x7ff;               //0x7ff = 2048 contagens
+    EQep1Regs.QDECCTL.bit.SWAP = 1;         // troca o sentido da contagem
+    EQep1Regs.QEPCTL.bit.QPEN = 1;        // QEP enable
+    EQep1Regs.QCAPCTL.bit.UPPS = 5;       // 1/32 for unit position
+    EQep1Regs.QCAPCTL.bit.CCPS = 7;       // 1/128 for CAP clock
+    EQep1Regs.QCAPCTL.bit.CEN = 1;        // QEP Capture Enable
+    EDIS;
+}
