@@ -112,38 +112,27 @@ void main(void){
     Setup_ePWM();                                      // Abre todas as chaves
     Setup_ADC();
                                                        // Configuração das interrupções
-
-
-
-
+    Setup_eQEP();
 
     EALLOW;                                             // Endereço das rotinas de interrupções
         PieVectTable.ADCA1_INT = &adca_isr;
         //PieVectTable.XINT2_INT  =  &alarm_handler_isr;
     EDIS;
 
-/*
-    EALLOW;
-   //##########__CONFIGURAÇÃO XINT2 (ALARME)__#######################################################################
-        PieCtrlRegs.PIECTRL.bit.ENPIE  = 1;        // Enable the PIE block
-        PieCtrlRegs.PIEIER1.bit.INTx5 = 1;        // Enable the PIE Group 1 INT 5. (XINT2)
-        XintRegs.XINT2CR.bit.POLARITY = 0;         // Interrupt will occur on the falling edge (high-to-low transition)
-        XintRegs.XINT2CR.bit.ENABLE   = 1;         // Enable XINT 2.
-    EDIS;
-*/
-    //##########__CONFIGURAÇÃO ADC_INT__#######################################################################
-      EALLOW;
+//##########__CONFIGURAÇÃO ADC_INT__#######################################################################
+  EALLOW;
 
-       PieCtrlRegs.PIEIER1.bit.INTx1   = 1 ;         // Habilita o PIE para interrupção do ADC.
-       AdcaRegs.ADCINTSEL1N2.bit.INT1E =1;
-       EDIS;
+   PieCtrlRegs.PIEIER1.bit.INTx1   = 1 ;         // Habilita o PIE para interrupção do ADC.
+   AdcaRegs.ADCINTSEL1N2.bit.INT1E =1;
+   EDIS;
 
-       // IER |= M_INT1;
+   // IER |= M_INT1;
 
     EINT;                                          // Enable Global interrupt INTM
     ERTM;                                          // Enable Global realtime interrupt DBGM , UTILIZADO PARA ALTERAR O VALOR DOS REGISTRADORES EM TEMPO REAL.
 
-
+int wa;
+int Posicao_ADC;
 
 //##########__CODIGO__#######################################################################
     while(1)
@@ -151,6 +140,11 @@ void main(void){
         Comando_L_D != 0 ? Liga_Bancada():Desliga_Bancada(); // Uiliza o debug em tempo real para ligar ou desligar a bancada
                                                              // Alterando o valor da variável Comando_L_D na janela de expressões
                                                              // do code composer studio.
+        wa = (8.0*60.0/20.0)/(EQep1Regs.QCPRD*64.0/200.0e6);
+        Posicao_ADC  = EQep1Regs.QPOSCNT;
+
+        //      [(8/20)rev * 60 s/min]/[(t2-t1)(QCPRDLAT)]
+
     }
 
 }
@@ -187,6 +181,10 @@ __interrupt void adca_isr(){
         w2 = (Uint16) (TB_Prd/2)*(1+Mi*__sin(__divf32(2*pi,NOS) * (float) index - 2*pi/3));
         w3 = (Uint16) (TB_Prd/2)*(1+Mi*__sin(__divf32(2*pi,NOS) * (float) index - 4*pi/3));
 
+        wa = (8.0*60.0/20.0)/(EQep1Regs.QCPRD*64.0/200.0e6);
+        Posicao_ADC  = EQep1Regs.QPOSCNT;
+
+        //      [(8/20)rev * 60 s/min]/[(t2-t1)(QCPRDLAT)]
 
         EPwm4Regs.CMPA.bit.CMPA = w1;
         EPwm5Regs.CMPA.bit.CMPA = w2;
@@ -198,6 +196,8 @@ __interrupt void adca_isr(){
 
 
 }
+
+
 
 //##########__ALARME ISR___#######################################################################
 interrupt void alarm_handler_isr(void){
@@ -681,29 +681,167 @@ void Setup_eQEP(){
     //eQEP1A
     GpioCtrlRegs.GPAGMUX1.bit.GPIO10= 0b01;
     GpioCtrlRegs.GPAMUX1.bit.GPIO10 = 0b01;
+    GpioCtrlRegs.GPACSEL2.bit.GPIO10= GPIO_MUX_CPU2;
 
     //eQEP1B
     GpioCtrlRegs.GPAGMUX1.bit.GPIO11= 0b01;
     GpioCtrlRegs.GPAMUX1.bit.GPIO11 = 0b01;
+    GpioCtrlRegs.GPACSEL2.bit.GPIO11= GPIO_MUX_CPU2;
 
     //eQEP1I
     GpioCtrlRegs.GPAGMUX1.bit.GPIO13= 0b01;
     GpioCtrlRegs.GPAMUX1.bit.GPIO13 = 0b01;
+    GpioCtrlRegs.GPACSEL2.bit.GPIO13= GPIO_MUX_CPU2;
 
     //GPyQSEL1 e o GPyQSEL2 são sincronos por default, deixei como está
 
-//eQEP1A
+//eQEP1A Pull Ups Ligados
     GpioCtrlRegs.GPAPUD.bit.GPIO10 = 1;
     GpioCtrlRegs.GPAPUD.bit.GPIO11 = 1;
     GpioCtrlRegs.GPAPUD.bit.GPIO13 = 1;
 
-    EQep1Regs.QUPRD = 1;            // Unit Timer for 100Hz at 200 MHz
-                                              // SYSCLKOUT
-    EQep1Regs.QDECCTL.bit.QSRC = 00;      // QEP quadrature count mode
+//Configura o EQep1:
 
+       EQep1Regs.QUPRD = 1;            // Unit Timer for 100Hz at 200 MHz
+                                                 // SYSCLKOUT
+       EQep1Regs.QDECCTL.bit.QSRC = 00;      // QEP quadrature count mode
 
+       EQep1Regs.QEPCTL.bit.FREE_SOFT = 0x2;//QEP Control =QEPCTL
+       EQep1Regs.QEPCTL.bit.PCRM = 2;       // PCRM=0x2 -> Position counter reset on the first index event
+       EQep1Regs.QEPCTL.bit.UTE = 1;        // Unit Timeout Enable
+       EQep1Regs.QEPCTL.bit.QCLM = 1;       // Latch on unit time out
+
+       EQep1Regs.QPOSMAX = 0x14;            //0x14 = 20 contagens de quadratura -> 4 * 5
+       EQep1Regs.QDECCTL.bit.SWAP = 1;      //troca o sentido da contagem
+       EQep1Regs.QEPCTL.bit.QPEN = 1;       //QEP enable
+
+       EQep1Regs.QCAPCTL.bit.UPPS = 3;      // 1/8 for unit position
+       EQep1Regs.QCAPCTL.bit.CCPS = 6;      // 1/64 for CAP clock
+
+       EQep1Regs.QCAPCTL.bit.CEN = 1;       // QEP Capture Enable
+
+       //EQep1Regs.QEINT.bit.UTO = 1;       // 400 Hz interrupt for speed estimation
 
     EDIS;
+
+    //################## Auro: Mudei os valores para o que a gente usa ############
+    //
+    // EXTRACTED FROM FILE:    Example_posspeed.c
+    //
+    // TITLE:   Pos/speed measurement using EQEP peripheral
+    //
+    // DESCRIPTION:
+    //
+    // This file includes the EQEP initialization and position and speed
+    // calculation functions called by Eqep_posspeed.c.  The position and speed
+    // calculation steps performed by POSSPEED_Calc() at  SYSCLKOUT =  200 MHz are
+    // described below:
+
+    //#############################################################################
+    //  ###### Encoder de 5 pulsos por volta -> 20 de quadratura #################
+    //#############################################################################
+
+    // 1. This program calculates: **theta_mech**
+    //
+    //    theta_mech = QPOSCNT/mech_Scaler = QPOSCNT/20, where 20 is the number
+    //                 of counts in 1 revolution.
+    //                (20/4 = 5 line/rev. quadrature encoder)
+    //
+
+    // 2. This program calculates: **theta_elec**
+    //
+    //    theta_elec = (# pole pairs) * theta_mech = 2*QPOSCNT/20
+    //
+
+
+    // 3. This program calculates: **SpeedRpm_fr**
+    //
+    //    SpeedRpm_fr = [(x2-x1)/20]/T   - Equation 1
+
+    //    Note (x2-x1) = difference in number of QPOSCNT counts. Dividing (x2-x1)
+    //    by 20 gives position relative to Index in one revolution.
+
+
+    // If base RPM  = 1800 rpm:   1800 rpm = [(x2-x1)/20]/10ms   - Equation 2
+
+    //                                     = [(x2-x1)/20]/(.01s*1 min/60 sec)
+    //                                     = [(x2-x1)/20]/(1/6000) min  - Equation 2
+
+    //                         max (x2-x1) = 20 counts, or 1 revolution in 10 ms
+
+
+    // If both sides of Equation 2 are divided by 1800 rpm, then:
+    //                   1 = [(x2-x1)/20] rev./[(1/6000) min * 1800rpm]
+
+    //                   Because (x2-x1) must be <20 (max) for QPOSCNT increment,
+    //                   (x2-x1)/20 < 1 for CW rotation
+
+    //                   And because (x2-x1) must be >-20 for QPOSCNT decrement,
+    //                   (x2-x1)/1800>-1  for CCW rotation (CCW= Counter Clockwise)
+
+    //                   speed_fr = [(x2-x1)/20]/[(1/6000) min * 1800rpm]
+    //                            = (x2-x1)/2     - Equation 3
+
+
+    // To convert speed_fr to RPM, multiply Equation 3 by 1800 rpm
+    //                   SpeedRpm_fr = 1800rpm *(x2-x1)/2  - Final Equation
+
+
+
+    // 2. **min rpm ** = selected at 10 rpm based on [CCPS] prescaler options
+    //    available (128 is greatest)
+
+
+    // 3. **SpeedRpm_pr**
+
+    //    SpeedRpm_pr = X/(t2-t1)  - Equation 4
+
+    //    where X = QCAPCTL [UPPS]/20 rev. (position relative to Index in
+    //                                        1 revolution)
+    // If  max/base speed = 1800 rpm:
+    //               1800 = (8/20)/[(t2-t1)/(200MHz/64)]
+
+    //          where 8 = QCAPCTL [UPPS] (Unit timeout - once every 8 edges)
+    //          where 64 = QCAPCTL [CCPS]
+
+    //            8/20 = position in 1 revolution (position as a fraction
+    //                                                of 1 revolution)
+
+    //   t2-t1/(200MHz/64), t2-t1= # of QCAPCLK cycles, and
+    //      QCAPCLK cycle = 1/(200MHz/64)
+//////                    = QCPRDLAT   #################################################
+
+
+    // So:       1800 rpm = [UPPS(200MHz/CCPS)*60s/min]/[20(t2-t1)]
+    //
+
+    //           1800 rpm = [8*(200MHz/64)*60s/min]/[20(t2-t1)]
+    //           t2-t1 = [8*(200MHz/64)*60s/min]/(20*1800rpm)  - Equation 5
+    //                    ~= 416.66 CAPCLK cycles = maximum (t2-t1) = SpeedScaler
+    //
+    // Divide both sides by (t2-t1), and:
+    //            1 = 32/(t2-t1) = [8(200MHz/64)*60 s/min]/(20*1800rpm)]/(t2-t1)
+
+    //       Because (t2-t1) must be < 416.66 for QPOSCNT increment:
+    //               416.66/(t2-t1) < 1 for CW rotation
+    //       And because (t2-t1) must be >-416.66 for QPOSCNT decrement:
+    //                416.66/(t2-t1)> -1 for CCW rotation
+    //
+    //       eed_pr = 416.66/(t2-t1)
+    //             or [8(200MHz/64)*60 s/min]/(20*1800rpm)]/(t2-t1) - Equation 6
+    //
+    // To convert speed_pr to RPM:
+    // Multiply Equation 6 by 1800rpm:
+    // SpeedRpm_fr  = 1800rpm * [8*(200MHz/64)*60 s/min]/[20*1800rpm*(t2-t1)]
+    //              = [8(200MHz/64)*60 s/min]/[20*(t2-t1)]
+    //              or [(8/20)rev * 60 s/min]/[(t2-t1)(QCPRDLAT)]-Final Equation
+    //
+    // More detailed calculation results can be found in the Example_freqcal.xls
+    // spreadsheet included in the example folder.
+    //
+    // Olhar o exemplo da texas citado no "title" para entender mais coisas.
+    //###########################################################################
+
 
 }
 
