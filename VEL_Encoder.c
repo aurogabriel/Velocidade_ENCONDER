@@ -681,17 +681,17 @@ void Setup_eQEP(){
     //eQEP1A
     GpioCtrlRegs.GPDGMUX1.bit.GPIO96=  0b01;
     GpioCtrlRegs.GPDMUX1.bit.GPIO96 = 0b01;
-    GpioCtrlRegs.GPDCSEL1.bit.GPIO96= GPIO_MUX_CPU2;
+    GpioCtrlRegs.GPDCSEL1.bit.GPIO96= GPIO_MUX_CPU1;
 
     //eQEP1B
     GpioCtrlRegs.GPDGMUX1.bit.GPIO97= 0b01;
     GpioCtrlRegs.GPDMUX1.bit.GPIO97 = 0b01;
-    GpioCtrlRegs.GPDCSEL1.bit.GPIO97= GPIO_MUX_CPU2;
+    GpioCtrlRegs.GPDCSEL1.bit.GPIO97= GPIO_MUX_CPU1;
 
     //eQEP1I
     GpioCtrlRegs.GPDGMUX1.bit.GPIO98= 0b01;
     GpioCtrlRegs.GPDMUX1.bit.GPIO98 = 0b01;
-    GpioCtrlRegs.GPDCSEL1.bit.GPIO98= GPIO_MUX_CPU2;
+    GpioCtrlRegs.GPDCSEL1.bit.GPIO98= GPIO_MUX_CPU1;
 
     //GPyQSEL1 e o GPyQSEL2 são sincronos por default, deixei como está
 
