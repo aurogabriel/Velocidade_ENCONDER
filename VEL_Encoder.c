@@ -34,7 +34,7 @@
 
 /////////////////////////
 //Variável do encoder
-unsigned int Posicao_ADC = 0; //Leitura da velocidade no módulo eqep.
+unsigned int Posicao_ADC = 10; //Leitura da velocidade no módulo eqep.
 float Rotor_Posicao = 0; //Posição angular do rotor.
 float Rotor_Posicao_Ant = 0; //Memória da posição angular do rotor.
 float delta_posicao =0; //Variação da posição angular do rotor.
@@ -45,7 +45,7 @@ unsigned long Velo_ADC =0 ; //Medida digital da velocidade.
 float Velo_aux = 0; //Variável auxiliar para controle de velocidade.
 float Velo_ant1 =0;//Valores passados para a velociddae do motor.
 float w = 0;
-float wa = 0;
+float wa = 10;
 float w_avg =0; //Velocidade angular depois do filtro.
 
 ////////////////////
@@ -87,7 +87,6 @@ __interrupt void timer0_isr(void);
 //__interrupt void alarm_handler_isr(void);     // Alarm Handler interrupt service routine function prototype.
 
 __interrupt void adca_isr(void);
-
 
 void main(void){
 //##########__INICIALIZAÇÃO__#######################################################################
@@ -131,8 +130,6 @@ void main(void){
     EINT;                                          // Enable Global interrupt INTM
     ERTM;                                          // Enable Global realtime interrupt DBGM , UTILIZADO PARA ALTERAR O VALOR DOS REGISTRADORES EM TEMPO REAL.
 
-int wa;
-int Posicao_ADC;
 
 //##########__CODIGO__#######################################################################
     while(1)
@@ -140,8 +137,6 @@ int Posicao_ADC;
         Comando_L_D != 0 ? Liga_Bancada():Desliga_Bancada(); // Uiliza o debug em tempo real para ligar ou desligar a bancada
                                                              // Alterando o valor da variável Comando_L_D na janela de expressões
                                                              // do code composer studio.
-        wa = (8.0*60.0/20.0)/(EQep1Regs.QCPRD*64.0/200.0e6);
-        Posicao_ADC  = EQep1Regs.QPOSCNT;
 
         //      [(8/20)rev * 60 s/min]/[(t2-t1)(QCPRDLAT)]
 
@@ -260,6 +255,8 @@ void Liga_Bancada(void)
         aux++;
         EDIS;
   }
+    wa = (8.0*60.0/20.0)/(EQep1Regs.QCPRD*64.0/200.0e6);
+    Posicao_ADC  = EQep1Regs.QPOSCNT;
 
 
 }
