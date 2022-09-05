@@ -678,24 +678,24 @@ void Setup_eQEP(){
     //eQEP1A
     GpioCtrlRegs.GPDMUX1.bit.GPIO96 = 0b01;
     GpioCtrlRegs.GPDGMUX1.bit.GPIO96=  0b01;
-    GpioCtrlRegs.GPDCSEL1.bit.GPIO96= GPIO_MUX_CPU1;
+    //GpioCtrlRegs.GPDCSEL1.bit.GPIO96= GPIO_MUX_CPU1;
 
     //eQEP1B
     GpioCtrlRegs.GPDMUX1.bit.GPIO97 = 0b01;
     GpioCtrlRegs.GPDGMUX1.bit.GPIO97= 0b01;
-    GpioCtrlRegs.GPDCSEL1.bit.GPIO97= GPIO_MUX_CPU1;
+    //GpioCtrlRegs.GPDCSEL1.bit.GPIO97= GPIO_MUX_CPU1;
 
     //eQEP1I
     GpioCtrlRegs.GPDMUX1.bit.GPIO98 = 0b01;
     GpioCtrlRegs.GPDGMUX1.bit.GPIO98= 0b01;
-    GpioCtrlRegs.GPDCSEL1.bit.GPIO98= GPIO_MUX_CPU1;
+    //GpioCtrlRegs.GPDCSEL1.bit.GPIO98= GPIO_MUX_CPU1;
 
     //GPyQSEL1 e o GPyQSEL2 são sincronos por default, deixei como está
 
-//eQEP1A Pull Ups Ligados
-    GpioCtrlRegs.GPDPUD.bit.GPIO96 = 0;
-    GpioCtrlRegs.GPDPUD.bit.GPIO97 = 0;
-    GpioCtrlRegs.GPDPUD.bit.GPIO98 = 0;
+//eQEP1A Pull Ups desligados
+    GpioCtrlRegs.GPDPUD.bit.GPIO96 = 1;
+    GpioCtrlRegs.GPDPUD.bit.GPIO97 = 1;
+    GpioCtrlRegs.GPDPUD.bit.GPIO98 = 1;
 
 //Configura o EQep1:
        EQep1Regs.QUPRD = 1;            // Unit Timer for 100Hz at 200 MHz
