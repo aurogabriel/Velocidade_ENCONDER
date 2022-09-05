@@ -702,6 +702,7 @@ void Setup_eQEP(){
 EDIS;
 
 //Configura o EQep1:
+
        EQep1Regs.QUPRD = 1;            // Unit Timer for 100Hz at 200 MHz
                                                  // SYSCLKOUT
        EQep1Regs.QDECCTL.bit.QSRC = 00;      // QEP quadrature count mode
