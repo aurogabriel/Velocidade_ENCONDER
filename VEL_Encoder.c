@@ -676,26 +676,26 @@ void Setup_eQEP(){
     EALLOW;
 
     //eQEP1A
-    GpioCtrlRegs.GPDGMUX1.bit.GPIO96=  0b01;
     GpioCtrlRegs.GPDMUX1.bit.GPIO96 = 0b01;
+    GpioCtrlRegs.GPDGMUX1.bit.GPIO96=  0b01;
     GpioCtrlRegs.GPDCSEL1.bit.GPIO96= GPIO_MUX_CPU1;
 
     //eQEP1B
-    GpioCtrlRegs.GPDGMUX1.bit.GPIO97= 0b01;
     GpioCtrlRegs.GPDMUX1.bit.GPIO97 = 0b01;
+    GpioCtrlRegs.GPDGMUX1.bit.GPIO97= 0b01;
     GpioCtrlRegs.GPDCSEL1.bit.GPIO97= GPIO_MUX_CPU1;
 
     //eQEP1I
-    GpioCtrlRegs.GPDGMUX1.bit.GPIO98= 0b01;
     GpioCtrlRegs.GPDMUX1.bit.GPIO98 = 0b01;
+    GpioCtrlRegs.GPDGMUX1.bit.GPIO98= 0b01;
     GpioCtrlRegs.GPDCSEL1.bit.GPIO98= GPIO_MUX_CPU1;
 
     //GPyQSEL1 e o GPyQSEL2 são sincronos por default, deixei como está
 
 //eQEP1A Pull Ups Ligados
-    GpioCtrlRegs.GPDPUD.bit.GPIO96 = 1;
-    GpioCtrlRegs.GPDPUD.bit.GPIO97 = 1;
-    GpioCtrlRegs.GPDPUD.bit.GPIO98 = 1;
+    GpioCtrlRegs.GPDPUD.bit.GPIO96 = 0;
+    GpioCtrlRegs.GPDPUD.bit.GPIO97 = 0;
+    GpioCtrlRegs.GPDPUD.bit.GPIO98 = 0;
 
 //Configura o EQep1:
 
