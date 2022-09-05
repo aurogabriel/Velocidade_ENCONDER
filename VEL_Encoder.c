@@ -698,24 +698,23 @@ void Setup_eQEP(){
     GpioCtrlRegs.GPDPUD.bit.GPIO98 = 0;
 
 //Configura o EQep1:
-
        EQep1Regs.QUPRD = 1;            // Unit Timer for 100Hz at 200 MHz
                                                  // SYSCLKOUT
        EQep1Regs.QDECCTL.bit.QSRC = 00;      // QEP quadrature count mode
 
        EQep1Regs.QEPCTL.bit.FREE_SOFT = 0x2;//QEP Control =QEPCTL
-       EQep1Regs.QEPCTL.bit.PCRM = 2;       // PCRM=0x2 -> Position counter reset on the first index event
+       EQep1Regs.QEPCTL.bit.PCRM = 01;       // PCRM=01 -> Position counter reset on Max position counter
        EQep1Regs.QEPCTL.bit.UTE = 1;        // Unit Timeout Enable
        EQep1Regs.QEPCTL.bit.QCLM = 1;       // Latch on unit time out
 
-       EQep1Regs.QPOSMAX = 0x14;            //0x14 = 20 contagens de quadratura -> 4 * 5
+       EQep1Regs.QPOSMAX = 0xffff;            //0xffff=65535 contagens de quadratura
        EQep1Regs.QDECCTL.bit.SWAP = 1;      //troca o sentido da contagem
-       EQep1Regs.QEPCTL.bit.QPEN = 1;       //QEP enable
 
        EQep1Regs.QCAPCTL.bit.UPPS = 3;      // 1/8 for unit position
        EQep1Regs.QCAPCTL.bit.CCPS = 6;      // 1/64 for CAP clock
 
        EQep1Regs.QCAPCTL.bit.CEN = 1;       // QEP Capture Enable
+       EQep1Regs.QEPCTL.bit.QPEN = 1;       //QEP enable
 
        //EQep1Regs.QEINT.bit.UTO = 1;       // 400 Hz interrupt for speed estimation
 
