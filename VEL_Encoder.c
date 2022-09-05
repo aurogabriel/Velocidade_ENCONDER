@@ -21,6 +21,12 @@
     GPIO 104 - Pino que aciona o relé que energiza a contactora que, por sua vez, energiza o circuito de potência.
     GPIO 105  - Pino que aciona o relé que energiza a fonte chaveada
     GPIO 14 - 3V3 (pino usado para o opto acplador de proteção)
+
+    GPIO96 - eQEP1A
+    GPIO97 - eQEP1B
+    GPIO99 - eQEP1I
+
+
 //#########################################################*/
 
 #include "F28x_Project.h"
@@ -77,16 +83,16 @@ void Liga_Bancada(void);
 void Desliga_Bancada(void);
 void Stop_SPWM(void);
 
+//Funções do Encoder
 void Setup_eQEP(void);
 
 void Set_ePWM_Frequency(uint32_t freq_pwm);
 
-//Funções do Encoder
-__interrupt void timer0_isr(void);
 
-//__interrupt void alarm_handler_isr(void);     // Alarm Handler interrupt service routine function prototype.
+__interrupt void alarm_handler_isr(void);     // Alarm Handler interrupt service routine function prototype.
 
 __interrupt void adca_isr(void);
+
 
 void main(void){
 //##########__INICIALIZAÇÃO__#######################################################################
@@ -138,7 +144,6 @@ void main(void){
                                                              // Alterando o valor da variável Comando_L_D na janela de expressões
                                                              // do code composer studio.
 
-        //      [(8/20)rev * 60 s/min]/[(t2-t1)(QCPRDLAT)]
 
     }
 
@@ -176,7 +181,6 @@ __interrupt void adca_isr(){
         w2 = (Uint16) (TB_Prd/2)*(1+Mi*__sin(__divf32(2*pi,NOS) * (float) index - 2*pi/3));
         w3 = (Uint16) (TB_Prd/2)*(1+Mi*__sin(__divf32(2*pi,NOS) * (float) index - 4*pi/3));
 
-        wa = (8.0*60.0/20.0)/(EQep1Regs.QCPRD*64.0/200.0e6);
         Posicao_ADC  = EQep1Regs.QPOSCNT;
 
         //      [(8/20)rev * 60 s/min]/[(t2-t1)(QCPRDLAT)]
@@ -255,8 +259,6 @@ void Liga_Bancada(void)
         aux++;
         EDIS;
   }
-    wa = (8.0*60.0/20.0)/(EQep1Regs.QCPRD*64.0/200.0e6);
-    Posicao_ADC  = EQep1Regs.QPOSCNT;
 
 
 }
@@ -673,7 +675,7 @@ void Setup_ePWM(void){
 
 }
 void Setup_eQEP(){
-    EALLOW;
+ EALLOW;
 
     //eQEP1A
     GpioCtrlRegs.GPDMUX1.bit.GPIO96 = 0b01;
@@ -686,8 +688,8 @@ void Setup_eQEP(){
     //GpioCtrlRegs.GPDCSEL1.bit.GPIO97= GPIO_MUX_CPU1;
 
     //eQEP1I
-    GpioCtrlRegs.GPDMUX1.bit.GPIO98 = 0b01;
-    GpioCtrlRegs.GPDGMUX1.bit.GPIO98= 0b01;
+    GpioCtrlRegs.GPDMUX1.bit.GPIO99 = 0b01;
+    GpioCtrlRegs.GPDGMUX1.bit.GPIO99= 0b01;
     //GpioCtrlRegs.GPDCSEL1.bit.GPIO98= GPIO_MUX_CPU1;
 
     //GPyQSEL1 e o GPyQSEL2 são sincronos por default, deixei como está
@@ -695,7 +697,9 @@ void Setup_eQEP(){
 //eQEP1A Pull Ups desligados
     GpioCtrlRegs.GPDPUD.bit.GPIO96 = 1;
     GpioCtrlRegs.GPDPUD.bit.GPIO97 = 1;
-    GpioCtrlRegs.GPDPUD.bit.GPIO98 = 1;
+    GpioCtrlRegs.GPDPUD.bit.GPIO99 = 1;
+
+EDIS;
 
 //Configura o EQep1:
        EQep1Regs.QUPRD = 1;            // Unit Timer for 100Hz at 200 MHz
@@ -718,7 +722,6 @@ void Setup_eQEP(){
 
        //EQep1Regs.QEINT.bit.UTO = 1;       // 400 Hz interrupt for speed estimation
 
-    EDIS;
 
     //################## Auro: Mudei os valores para o que a gente usa ############
     //
