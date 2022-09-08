@@ -675,7 +675,7 @@ void Setup_ePWM(void){
 
 }
 void Setup_eQEP(){
- EALLOW;
+    EALLOW;
 
     //eQEP1A
     GpioCtrlRegs.GPDMUX1.bit.GPIO96 = 0b01;
@@ -699,7 +699,6 @@ void Setup_eQEP(){
     GpioCtrlRegs.GPDPUD.bit.GPIO97 = 1;
     GpioCtrlRegs.GPDPUD.bit.GPIO99 = 1;
 
-EDIS;
 
 //Configura o EQep1:
 
@@ -722,7 +721,7 @@ EDIS;
        EQep1Regs.QEPCTL.bit.QPEN = 1;       //QEP enable
 
        //EQep1Regs.QEINT.bit.UTO = 1;       // 400 Hz interrupt for speed estimation
-
+       EDIS;
 
     //################## Auro: Mudei os valores para o que a gente usa ############
     //
