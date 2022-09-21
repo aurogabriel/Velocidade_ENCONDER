@@ -1,4 +1,3 @@
-
 /*#########################################################
                          main.c
     Este código utiliza a técnica SPWM para acionar as chaves de um inversor trifásico.
@@ -21,12 +20,9 @@
     GPIO 104 - Pino que aciona o relé que energiza a contactora que, por sua vez, energiza o circuito de potência.
     GPIO 105  - Pino que aciona o relé que energiza a fonte chaveada
     GPIO 14 - 3V3 (pino usado para o opto acplador de proteção)
-
     GPIO96 - eQEP1A
     GPIO97 - eQEP1B
     GPIO99 - eQEP1I
-
-
 //#########################################################*/
 
 #include "F28x_Project.h"
@@ -152,7 +148,6 @@ void main(void){
 
 //##########__ADCA ISR___#######################################################################
 __interrupt void adca_isr(){
-
         // Rotina ADC com 12 KHZ (frequÊncia de amostragem do sinal senoidal da moduladora).
 
         if(index  == 200 )
@@ -181,14 +176,22 @@ __interrupt void adca_isr(){
         w2 = (Uint16) (TB_Prd/2)*(1+Mi*__sin(__divf32(2*pi,NOS) * (float) index - 2*pi/3));
         w3 = (Uint16) (TB_Prd/2)*(1+Mi*__sin(__divf32(2*pi,NOS) * (float) index - 4*pi/3));
 
+
         Posicao_ADC  = EQep1Regs.QPOSCNT;
 
-        //      [(8/20)rev * 60 s/min]/[(t2-t1)(QCPRDLAT)]
+          //wa = (32.0*60.0/2048.0)/(EQep1Regs.QCPRD*6.4e-7);
+          if(EQep1Regs.QEPSTS.bit.COEF == 0 && EQep1Regs.QEPSTS.bit.CDEF == 0){
+              wa = (8.0*60.0/20)/(EQep1Regs.QCPRD*64.0/200.0e6);
+          }else{
+              EQep1Regs.QEPSTS.bit.COEF = 0;
+              EQep1Regs.QEPSTS.bit.CDEF = 0;
+          }
 
         EPwm4Regs.CMPA.bit.CMPA = w1;
         EPwm5Regs.CMPA.bit.CMPA = w2;
         EPwm6Regs.CMPA.bit.CMPA = w3;
 
+     //   GpioDataRegs.GPBCLEAR.bit.GPIO34=1;
 
         AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1;    // Limpa as FLAGS provinientes do Trigger.
         PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;  //
@@ -209,9 +212,9 @@ interrupt void alarm_handler_isr(void){
 
     while(1){
 
-        GpioDataRegs.GPATOGGLE.bit.GPIO31 =1;       //LEDS do DSP para sinalização do Alarme
-        GpioDataRegs.GPBTOGGLE.bit.GPIO34 =1;
-        DELAY_US(400000);
+       // GpioDataRegs.GPATOGGLE.bit.GPIO31 =1;       //LEDS do DSP para sinalização do Alarme
+       // GpioDataRegs.GPBTOGGLE.bit.GPIO34 =1;
+       // DELAY_US(400000);
     }
 
 
@@ -240,11 +243,12 @@ void Liga_Bancada(void)
 
   if(aux == 0 )
   {
-      EALLOW;
+          EALLOW;
 
         Stop_SPWM();
 
         GpioDataRegs.GPDSET.bit.GPIO105 = 1;     // Liga fonte de controle.
+        GpioDataRegs.GPBSET.bit.GPIO34=1;
         DELAY_US(2000000);
         GpioDataRegs.GPDSET.bit.GPIO104 = 1;    //Liga fonte de potÊncia.
 
@@ -258,7 +262,9 @@ void Liga_Bancada(void)
 
         aux++;
         EDIS;
+
   }
+
 
 
 }
@@ -675,35 +681,25 @@ void Setup_ePWM(void){
 
 }
 void Setup_eQEP(){
+
     EALLOW;
 
-    //eQEP1A
-    GpioCtrlRegs.GPDMUX1.bit.GPIO96 = 0b01;
-    GpioCtrlRegs.GPDGMUX1.bit.GPIO96=  0b01;
-    //GpioCtrlRegs.GPDCSEL1.bit.GPIO96= GPIO_MUX_CPU1;
 
-    //eQEP1B
-    GpioCtrlRegs.GPDMUX1.bit.GPIO97 = 0b01;
-    GpioCtrlRegs.GPDGMUX1.bit.GPIO97= 0b01;
-    //GpioCtrlRegs.GPDCSEL1.bit.GPIO97= GPIO_MUX_CPU1;
+        //EQEP.
+        InitEQep1Gpio();
 
-    //eQEP1I
-    GpioCtrlRegs.GPDMUX1.bit.GPIO99 = 0b01;
-    GpioCtrlRegs.GPDGMUX1.bit.GPIO99= 0b01;
-    //GpioCtrlRegs.GPDCSEL1.bit.GPIO98= GPIO_MUX_CPU1;
-
-    //GPyQSEL1 e o GPyQSEL2 são sincronos por default, deixei como está
-
-//eQEP1A Pull Ups desligados
-    GpioCtrlRegs.GPDPUD.bit.GPIO96 = 1;
-    GpioCtrlRegs.GPDPUD.bit.GPIO97 = 1;
-    GpioCtrlRegs.GPDPUD.bit.GPIO99 = 1;
+        GPIO_SetupPinMux(43, GPIO_MUX_CPU1, 0xF);
+        GPIO_SetupPinOptions(43, GPIO_INPUT, GPIO_PUSHPULL);
+        GPIO_SetupPinMux(42, GPIO_MUX_CPU1, 0xF);
+        GPIO_SetupPinOptions(42, GPIO_OUTPUT, GPIO_ASYNC);
 
 
-//Configura o EQep1:
+    //Configura o EQep1:
 
        EQep1Regs.QUPRD = 1;            // Unit Timer for 100Hz at 200 MHz
                                                  // SYSCLKOUT
+
+
        EQep1Regs.QDECCTL.bit.QSRC = 00;      // QEP quadrature count mode
 
        EQep1Regs.QEPCTL.bit.FREE_SOFT = 0x2;//QEP Control =QEPCTL
@@ -711,7 +707,9 @@ void Setup_eQEP(){
        EQep1Regs.QEPCTL.bit.UTE = 1;        // Unit Timeout Enable
        EQep1Regs.QEPCTL.bit.QCLM = 1;       // Latch on unit time out
 
-       EQep1Regs.QPOSMAX = 0xffff;            //0xffff=65535 contagens de quadratura
+
+
+       EQep1Regs.QPOSMAX = 0x20;            //0xffff=65535 contagens de quadratura
        EQep1Regs.QDECCTL.bit.SWAP = 1;      //troca o sentido da contagem
 
        EQep1Regs.QCAPCTL.bit.UPPS = 3;      // 1/8 for unit position
@@ -744,6 +742,8 @@ void Setup_eQEP(){
     //
     //    theta_mech = QPOSCNT/mech_Scaler = QPOSCNT/20, where 20 is the number
     //                 of counts in 1 revolution.
+
+
     //                (20/4 = 5 line/rev. quadrature encoder)
     //
 
@@ -817,6 +817,7 @@ void Setup_eQEP(){
     //           1800 rpm = [8*(200MHz/64)*60s/min]/[20(t2-t1)]
     //           t2-t1 = [8*(200MHz/64)*60s/min]/(20*1800rpm)  - Equation 5
     //                    ~= 416.66 CAPCLK cycles = maximum (t2-t1) = SpeedScaler
+       //                   52.0825
     //
     // Divide both sides by (t2-t1), and:
     //            1 = 32/(t2-t1) = [8(200MHz/64)*60 s/min]/(20*1800rpm)]/(t2-t1)
@@ -843,4 +844,3 @@ void Setup_eQEP(){
 
 
 }
-
