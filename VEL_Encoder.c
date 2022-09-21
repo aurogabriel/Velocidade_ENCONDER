@@ -33,7 +33,7 @@
 #define NOS 200 //Number of Samples
 #define Mi 0.8   // Índice de modulação
 #define pi 3.14159265358979323846
-
+int malha=0;
 /////////////////////////
 //Variável do encoder
 unsigned int Posicao_ADC = 10; //Leitura da velocidade no módulo eqep.
@@ -149,47 +149,288 @@ void main(void){
 //##########__ADCA ISR___#######################################################################
 __interrupt void adca_isr(){
         // Rotina ADC com 12 KHZ (frequÊncia de amostragem do sinal senoidal da moduladora).
+        if(malha==0){
 
-        if(index  == 200 )
-          index = 0;     //Limpa o Buffer.
-        else
-          index++;
-
-        // Transoforma o resultado decimal equivalente ao binário da conversão de cada fase em uma tensão de -1,15 a 1,15 V
-        Converted_Voltage_P1 = __divf32(3.0*AdcaResultRegs.ADCRESULT0,4096.0)-1.65;
-        Converted_Voltage_P2 = __divf32(3.0*AdcbResultRegs.ADCRESULT1,4096.0)-1.65;
-        Converted_Voltage_P3 = __divf32(3.0*AdccResultRegs.ADCRESULT2,4096.0)-1.65;
-
-        /// * Adc Voltage Range = 0 : 3.0 V
-        // * Sensor Voltage Range = 0.5 : 2.8 V
-        // * Converted_Voltage_Px Voltage Range = -1.15 : 1.15 V
+            if(index  == 200 )
+              index = 0;     //Limpa o Buffer.
+            else
+              index++;
 
 
-        //Calcula a corrente através da tensão pela sensibilidade do sensor : 18.4 mV / A
-         current_phase_1 =- __divf32(Converted_Voltage_P1,0.0184);
-         current_phase_2 =- __divf32(Converted_Voltage_P2 ,0.0184);
-         current_phase_3 =- __divf32(Converted_Voltage_P3,0.0184);
+            //Gera Moduladora Senoidal .
+            w1 = (Uint16) (TB_Prd/2)*(1+Mi*__sin(__divf32(2*pi,NOS) * (float) index   ));
+            w2 = (Uint16) (TB_Prd/2)*(1+Mi*__sin(__divf32(2*pi,NOS) * (float) index - 2*pi/3));
+            w3 = (Uint16) (TB_Prd/2)*(1+Mi*__sin(__divf32(2*pi,NOS) * (float) index - 4*pi/3));
 
 
-        //Gera Moduladora Senoidal .
-        w1 = (Uint16) (TB_Prd/2)*(1+Mi*__sin(__divf32(2*pi,NOS) * (float) index   ));
-        w2 = (Uint16) (TB_Prd/2)*(1+Mi*__sin(__divf32(2*pi,NOS) * (float) index - 2*pi/3));
-        w3 = (Uint16) (TB_Prd/2)*(1+Mi*__sin(__divf32(2*pi,NOS) * (float) index - 4*pi/3));
 
+            EPwm4Regs.CMPA.bit.CMPA = w1;
+            EPwm5Regs.CMPA.bit.CMPA = w2;
+            EPwm6Regs.CMPA.bit.CMPA = w3;
+
+        }
 
         Posicao_ADC  = EQep1Regs.QPOSCNT;
 
-          //wa = (32.0*60.0/2048.0)/(EQep1Regs.QCPRD*6.4e-7);
-          if(EQep1Regs.QEPSTS.bit.COEF == 0 && EQep1Regs.QEPSTS.bit.CDEF == 0){
-              wa = (8.0*60.0/20)/(EQep1Regs.QCPRD*64.0/200.0e6);
-          }else{
-              EQep1Regs.QEPSTS.bit.COEF = 0;
-              EQep1Regs.QEPSTS.bit.CDEF = 0;
-          }
+      //wa = (32.0*60.0/2048.0)/(EQep1Regs.QCPRD*6.4e-7);
+      if(EQep1Regs.QEPSTS.bit.COEF == 0 && EQep1Regs.QEPSTS.bit.CDEF == 0){
+          wa = (8.0*60.0/20)/(EQep1Regs.QCPRD*64.0/200.0e6);
+      }else{
+          EQep1Regs.QEPSTS.bit.COEF = 0;
+          EQep1Regs.QEPSTS.bit.CDEF = 0;
+      }
 
-        EPwm4Regs.CMPA.bit.CMPA = w1;
-        EPwm5Regs.CMPA.bit.CMPA = w2;
-        EPwm6Regs.CMPA.bit.CMPA = w3;
+
+        //POSIÇAO ANGULAR.
+        Rotor_Posicao = ((float)Posicao_ADC)*DPI/2048.0;
+        delta_posicao = Rotor_Posicao - Rotor_Posicao_Ant;
+
+        //ROTOR PARADO ??
+        if(delta_posicao == 0||Velo == 0){
+            Velo_aux = Velo;
+        }
+
+        //VELOCIDADE NEGATIVA??
+        if (delta_posicao <0 || Velo<0){
+            delta_posicao = delta_posicao_1;
+        }
+
+        //VELOCIDADE POSITIVA.
+        if (delta_posicao>0 || Velo>0){
+            //DERIVADA DISCRETA DA POSIÇÃO = VELOCIDADE.
+            w = (float)((delta_posicao)/(0.000160));
+            Velo = (float)(w*(60/(DPI)));
+            Velo = wa;
+            // Filtro passa baixa para f32f
+            Velo_avg = Velo_avg + 0.000160*100.0*(Velo - Velo_avg);
+            w_avg = (Velo_avg*DPI)/(60);
+
+            //Velocidade medida em valores digitais.
+            Velo_ADC = (int)(2.048*Velo_avg);
+        }
+        Rotor_Posicao_Ant = Rotor_Posicao;
+        Velo_ant1 = Velo_avg;
+
+    //INÍCIO DA MALHA DE CONTROLE.
+    if (malha==1){
+        //CAMPO ORIENTADO INDIRETO.
+        float v_controle = Velo_avg;
+        T = ((Llr+Lm)/Rr);
+//        T = (Rr/(Llr+Lm));
+        wsl = (ref_kq)/(T*ref_kd);
+//        w_tot = wsl + 2*w_avg;
+        w_tot = wsl + v_controle*DPI/60.0;
+
+        theta_atual = ((160E-006)*w_tot) + theta_ant; // Integrador discreto.
+        theta_ant = theta_atual;
+
+        if(theta_atual > DPI){
+            theta_atual = theta_atual -DPI;
+            theta_ant = theta_atual;// Controle para manter Theta
+        }
+        if(theta_atual < 0){
+            theta_atual = theta_atual +DPI;
+            theta_ant = theta_atual;// Controle para manter Theta
+        }
+
+        // APLICAÇÃO DAS TRANSFORMADAS DE EIXO DE CLARKE E PARK.
+        // 2 - park.
+        theta_rad = theta_atual;
+
+        if(theta_rad > DPI){
+            theta_rad = theta_rad - DPI;
+        }
+        if(theta_rad < -DPI){
+            theta_rad = theta_rad + DPI;
+        }
+
+        I_d = 0.81649658092772603273242802490196*(ic*__cos(theta_rad) + ib*__cos(theta_rad - ((DPI)/3)) + ia*__cos(theta_rad -((2*DPI)/3)));
+        I_q = 0.81649658092772603273242802490196*(-ic*__sin(theta_rad) - ib*__sin(theta_rad - ((DPI)/3)) - ia*__sin(theta_rad -((2*DPI)/3)));
+
+        I_atual_d = I_d;
+        I_atual_q = I_q;
+
+        data1->id = I_d;
+        data1->iq = I_q;
+
+        //Correntes d e q em valores digitais.
+
+        I_d_AD = (int)(1024*I_d) + 2048;
+        I_q_AD = (int)(1024*I_q) + 2048;
+
+
+        //MALHA DE VELOCIDADE.
+        cont_velo ++;
+        if(cont_velo==1225){
+            //Referência degrau
+            if(ref==1){
+                ref_Velo = 1000;
+                ref_Velo_AD = (int)(2.048*ref_Velo);
+            }
+
+            //Referência triangular
+            if (ref==2){
+                t = 0.096*cont_velo_aux;
+                if(t<2){
+                    ref_Velo = 100*(t) + 600 ;
+                    ref_Velo_AD = (int)(2.048*ref_Velo);
+                    cont_velo_aux ++;
+                }
+                if(t>=2){
+                    ref_Velo = -100*(t) + 1000 ;
+                    ref_Velo_AD = (int)(2.048*ref_Velo);
+                    cont_velo_aux ++;
+                }
+                if(t>=4){
+                    cont_velo_aux = 0;
+                }
+            }
+
+            //Referência trapezoidal
+            if (ref==3){
+                t = 0.096*cont_velo_aux;
+                if(t<1){
+                    ref_Velo = 100*(t) + 600 ;
+                    ref_Velo_AD = (int)(2.048*ref_Velo);
+                    cont_velo_aux ++;
+                }
+                if(t>=1 && t<2){
+                    ref_Velo = 800;
+                    ref_Velo_AD = (int)(2.048*ref_Velo);
+                    cont_velo_aux ++;
+                }
+                if(t>=2){
+                    ref_Velo = -100*(t) + 1100 ;
+                    ref_Velo_AD = (int)(2.048*ref_Velo);
+                    cont_velo_aux ++;
+                }
+                if(t>=5 && t<6){
+                    ref_Velo = 600;
+                    ref_Velo_AD = (int)(2.048*ref_Velo);
+                    cont_velo_aux ++;
+                }
+                if(t>=5 && t<6){
+                    cont_velo_aux = 0;
+                }
+            }
+
+            //Referência senoidal
+            if(ref==4){
+                t = 0.096*cont_velo_aux;
+                ref_Velo = 600 + 200*__sin(DPI*0.25*t);
+                cont_velo_aux++;
+                if(t>=4){
+                    cont_velo_aux = 0;
+                }
+            }
+            if(ref==5){
+                t = 0.096*cont_velo_aux;
+                if(t >= 5){
+                    ref_Velo = 1000;
+                }else{
+                    ref_Velo = 500;
+                }
+                cont_velo_aux++;
+                if(t>=10){
+                    cont_velo_aux = 0;
+                }
+                ref_Velo_AD = (int)(2.048*ref_Velo);
+            }
+            cont_velo = 0;
+
+            //PI malha de velocidade
+            double kp = 6.6667e-05;
+            double ki = 6.6334e-05;
+
+            erro_Velo = ref_Velo - v_controle;
+            ref_kq = ref_kq_ant + ki*erro_Velo_ant1 + kp*erro_Velo;
+            erro_Velo_ant1 = erro_Velo;
+            ref_kq_ant = ref_kq;
+        }
+        ref_kd = 0.4;
+        n_degrau++;
+        if(n_degrau >= 6250*3){
+            n_degrau = 0;
+            if(iq == 0.5){
+                iq = 0.7;
+            }else{
+                iq = 0.5;
+            }
+        }
+
+        //REFERÊNCIAS EIXO D E Q:
+        ref_kd_AD = (int)(1024*ref_kd) + 2048;
+        ref_kq_AD = (int)(1024*ref_kq) + 2048;
+
+        //CÁLCULO DOS ERROS
+        erro_cd = ref_kd - I_d;
+        erro_cq =  ref_kq - I_q;
+
+        float kpi = 103, kii = 100.4;
+        v_atual_d = v_d_ant + kpi*erro_cd - kii*erro_cd_ant1;
+        v_atual_q = v_q_ant + kpi*erro_cq - kii*erro_cq_ant1;
+
+
+        //Atualização das variáveis.
+        erro_cd_ant1 = erro_cd;
+        erro_cq_ant1 = erro_cq;
+
+        I_q_ant = I_atual_q;
+        v_d_ant = v_atual_d;
+        v_q_ant = v_atual_q;
+
+        //APLICAÇÃO DAS TRANSFORMADAS INVERSAS DE CLARKE E PARK:
+        Va =  0.81649658092772603273242802490196*(v_atual_d*__cos(theta_rad) - v_atual_q*__sin(theta_rad));
+        Vb =  0.81649658092772603273242802490196*(v_atual_d*__cos(theta_rad - ((DPI)/3.0)) - v_atual_q*__sin(theta_rad - ((DPI)/3.0)));
+        Vc =  0.81649658092772603273242802490196* (v_atual_d*__cos(theta_rad - ((2*DPI)/3.0)) - v_atual_q*__sin(theta_rad - ((2*DPI)/3.0)));
+
+        //GANHO DE MODULAÇÃO:
+        Va = Va*16;
+        Vb = Vb*16;
+        Vc = Vc*16;
+
+        //OFFSET:
+        Va = Va + 4000;
+        Vb = Vb + 4000;
+        Vc = Vc + 4000;
+
+        //SATURADOR:
+        if (Va >= 8000){
+            Va = 7950;
+        }
+        if (Va <= 0){
+            Va = 50;
+        }
+        if (Vb >= 8000){
+            Vb = 7950;
+        }
+        if (Vb <= 0 ){
+            Vb = 50;
+        }
+        if (Vc >= 8000){
+            Vc = 7950;
+        }
+        if (Vc <= 0){
+            Vc = 50;
+        }
+
+        V_a = (Va - 4000)/16.0;
+        V_b = (Vb - 4000)/16.0;
+        V_c = (Vc - 4000)/16.0;
+
+        //DacaRegs.DACVALS.all = (V_a*1024.0/1000.0) + 1024;
+        //DacbRegs.DACVALS.all = (V_b*1024.0/1000.0) + 1024;
+
+        //MODULAÇÃO:
+        EPwm1Regs.CMPA.bit.CMPA = Vc; // adjust duty for output EPWM1A
+        EPwm2Regs.CMPA.bit.CMPA = Vb; // adjust duty for output EPWM2A
+        EPwm3Regs.CMPA.bit.CMPA = Va; // adjust duty for output EPWM3A
+        //SEQUENCIA CORRETA DE CIMA PRA BAIXO C,B,A
+    }
+
+    saida = 1;
+    i_amostra++;
+    data1->j = i_amostra;
 
      //   GpioDataRegs.GPBCLEAR.bit.GPIO34=1;
 
@@ -198,8 +439,25 @@ __interrupt void adca_isr(){
 
 
 }
+/*
+// Transoforma o resultado decimal equivalente ao binário da conversão de cada fase em uma tensão de -1,15 a 1,15 V
+       Converted_Voltage_P1 = __divf32(3.0*AdcaResultRegs.ADCRESULT0,4096.0)-1.65;
+       Converted_Voltage_P2 = __divf32(3.0*AdcbResultRegs.ADCRESULT1,4096.0)-1.65;
+       Converted_Voltage_P3 = __divf32(3.0*AdccResultRegs.ADCRESULT2,4096.0)-1.65;
+
+       /// * Adc Voltage Range = 0 : 3.0 V
+       // * Sensor Voltage Range = 0.5 : 2.8 V
+       // * Converted_Voltage_Px Voltage Range = -1.15 : 1.15 V
 
 
+       //Calcula a corrente através da tensão pela sensibilidade do sensor : 18.4 mV / A
+        current_phase_1 =- __divf32(Converted_Voltage_P1,0.0184);
+        current_phase_2 =- __divf32(Converted_Voltage_P2 ,0.0184);
+        current_phase_3 =- __divf32(Converted_Voltage_P3,0.0184);
+
+ *
+ *
+ */
 
 //##########__ALARME ISR___#######################################################################
 interrupt void alarm_handler_isr(void){
@@ -212,9 +470,9 @@ interrupt void alarm_handler_isr(void){
 
     while(1){
 
-       // GpioDataRegs.GPATOGGLE.bit.GPIO31 =1;       //LEDS do DSP para sinalização do Alarme
-       // GpioDataRegs.GPBTOGGLE.bit.GPIO34 =1;
-       // DELAY_US(400000);
+        GpioDataRegs.GPATOGGLE.bit.GPIO31 =1;       //LEDS do DSP para sinalização do Alarme
+        GpioDataRegs.GPBTOGGLE.bit.GPIO34 =1;
+        DELAY_US(400000);
     }
 
 
@@ -276,7 +534,7 @@ void Desliga_Bancada(void)
 
     GpioDataRegs.GPDCLEAR.bit.GPIO104 = 1;  // Desliga fonte de potÊncia
 
-    DELAY_US(2000000);
+    DELAY_US(5000000);
 
     GpioDataRegs.GPDCLEAR.bit.GPIO105 = 1; // Desliga fonte de controle
 
